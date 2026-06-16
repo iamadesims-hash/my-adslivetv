@@ -1,0 +1,6 @@
+{
+  "name": "AdSLiveTv",
+  "description": "A premium football broadcast streaming and dynamic matches platform featuring licensed live feeds, live scores, interactive match centers, news, highlights, VIP subscription management, and AI predictions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

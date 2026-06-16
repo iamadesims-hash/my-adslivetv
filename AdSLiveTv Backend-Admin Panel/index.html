@@ -1,0 +1,2130 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AdSLiveTv Backend-Admin Panel</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Google Fonts: Space Grotesk and Inter -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <!-- Tailwind Config -->
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['Space Grotesk', 'sans-serif'],
+          },
+          colors: {
+            'brand-dark': '#090714',
+            'brand-card': '#120f26',
+            'primary-blue': '#2563eb',
+            'secondary-green': '#10b981',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Styling variables and transitions for a flawless interface */
+    :root {
+      --bg-color: #090714;
+      --text-color: #e4e4e7;
+      --card-bg: #120f26;
+      --border-color: rgba(255, 255, 255, 0.05);
+      --input-bg: rgba(0, 0, 0, 0.4);
+      --muted-text: #a1a1aa;
+    }
+
+    html.light-mode {
+      --bg-color: #f4f4f6;
+      --text-color: #181c24;
+      --card-bg: #ffffff;
+      --border-color: rgba(0, 0, 0, 0.08);
+      --input-bg: #fdfdfd;
+      --muted-text: #5b6271;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    .bg-brand-card {
+      background-color: var(--card-bg);
+      border-color: var(--border-color);
+      transition: background-color 0.3s ease, border-color 0.3s ease;
+    }
+
+    .border-white\/5 {
+      border-color: var(--border-color) !important;
+    }
+
+    input, select, textarea {
+      background-color: var(--input-bg) !important;
+      border-color: var(--border-color) !important;
+      color: var(--text-color) !important;
+    }
+
+    .text-zinc-400 {
+      color: var(--muted-text) !important;
+    }
+
+    /* Simple custom scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Value counting-up transitions and glow highlights */
+    @keyframes value-flash {
+      0% { transform: scale(1); filter: brightness(1.2) drop-shadow(0 0 8px rgba(37, 99, 235, 0.4)); }
+      50% { transform: scale(1.04); filter: brightness(1.7) drop-shadow(0 0 12px rgba(16, 185, 129, 0.6)); }
+      100% { transform: scale(1); filter: brightness(1); }
+    }
+    .metric-flash-effect {
+      animation: value-flash 0.65s ease-out;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body class="font-sans min-h-screen flex flex-col selection:bg-primary-blue/30 selection:text-white">
+
+  <!-- ADMIN SECURE LOGIN OVERLAY (Always checks session on load) -->
+  <div id="admin-login-overlay" class="flex flex-col items-center justify-center min-h-screen bg-brand-dark px-4 py-8 relative">
+    <!-- Glowing Background Orbs -->
+    <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-primary-blue/10 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none"></div>
+
+    <div class="w-full max-w-md bg-brand-card border border-white/5 rounded-2xl p-8 shadow-2xl relative z-10 space-y-6">
+      <div class="text-center space-y-2">
+        <div class="inline-flex bg-primary-blue/10 p-3 rounded-2xl border border-primary-blue/30 text-primary-blue mb-2">
+          <!-- Shield Lock Icon -->
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+          </svg>
+        </div>
+        <h2 class="text-2xl font-bold font-display tracking-tight text-white">AdSLiveTv Secure Portal</h2>
+        <p class="text-xs text-zinc-400">Provide verified server credentials to access the decoupled AdSLiveTv administrative control board.</p>
+      </div>
+
+      <form id="login-form" class="space-y-4">
+        <div class="space-y-1">
+          <label class="text-xs text-zinc-300 font-mono">Secured Email Address</label>
+          <input 
+            type="email" 
+            id="login-email" 
+            placeholder="admin@adslivetv.com" 
+            required
+            class="w-full bg-black/40 border border-white/5 outline-none rounded-xl px-4 py-3 text-xs text-white focus:border-primary-blue/50 transition-colors"
+          />
+        </div>
+
+        <div class="space-y-1">
+          <label class="text-xs text-zinc-300 font-mono">Portal Password</label>
+          <input 
+            type="password" 
+            id="login-password" 
+            placeholder="••••••••••••••" 
+            required
+            class="w-full bg-black/40 border border-white/5 outline-none rounded-xl px-4 py-3 text-xs text-white focus:border-primary-blue/50 transition-colors"
+          />
+        </div>
+
+        <div id="login-error" class="hidden p-2.5 rounded-xl text-center text-xs font-bold text-rose-300 bg-rose-500/15 border border-rose-500/10"></div>
+
+        <button 
+          type="submit" 
+          class="w-full bg-primary-blue hover:bg-primary-blue/95 text-white font-bold py-3 rounded-xl text-xs transition-colors flex items-center justify-center gap-2 font-display"
+        >
+          <span>Authenticate Session</span>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"></path>
+          </svg>
+        </button>
+      </form>
+      
+      <div class="text-center pb-2">
+        <a href="/" class="text-[11px] text-zinc-500 hover:text-white underline transition-colors">Return to Home Screen</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN DASHBOARD CONTENT AREA (HIDDEN UNTIL AUTHENTICATED) -->
+  <div id="admin-main-dashboard" class="hidden flex flex-col min-h-screen">
+
+    <!-- TOP HEADER PANEL -->
+    <header class="bg-brand-card/70 border-b border-white/5 backdrop-blur-md sticky top-0 z-50 px-4 py-4 sm:px-8">
+      <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div class="flex items-center gap-3">
+          <div class="bg-primary-blue/10 p-2.5 rounded-xl border border-primary-blue/30 text-primary-blue">
+            <!-- Shield Icon -->
+            <svg class="w-6 h-6 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+            </svg>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold font-display tracking-tight text-white flex items-center gap-2">
+              AdSLiveTv <span class="text-xs font-mono font-medium bg-primary-blue/20 text-blue-400 border border-primary-blue/30 px-2 py-0.5 rounded-full">Backend-Admin Panel</span>
+            </h1>
+            <p class="text-[11px] text-zinc-400">Main hub for API token feeds, subscription control, and live match moderation.</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <!-- Audio Alert Toggle Button -->
+          <button 
+            id="audio-alert-toggler"
+            onclick="toggleAudioAlerts()" 
+            class="p-2 bg-white/5 hover:bg-white/10 dark:hover:bg-zinc-855 border border-white/10 rounded-xl transition-all text-zinc-300 flex items-center justify-center cursor-pointer"
+            title="Toggle Audio Notifications"
+            type="button"
+          >
+            <!-- Audio On Icon (Speaker) -->
+            <svg id="audio-on-icon" class="w-4 h-4 hidden text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M12 18.75V5.25L7.75 9.5H4.5v5h3.25L12 18.75z"></path>
+            </svg>
+            <!-- Audio Off Icon (Speaker with line/mute) -->
+            <svg id="audio-off-icon" class="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"></path>
+            </svg>
+          </button>
+
+          <!-- Light/Dark Mode Toggle -->
+          <button 
+            id="theme-toggler"
+            onclick="toggleTheme()" 
+            class="p-2 bg-white/5 hover:bg-white/10 dark:hover:bg-zinc-805 border border-white/10 rounded-xl transition-all text-zinc-300 cursor-pointer"
+            title="Toggle Screen Theme"
+            type="button"
+          >
+            <!-- Sun Icon -->
+            <svg id="theme-sun-icon" class="w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 9H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m12.728 12.728l.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z"></path>
+            </svg>
+            <!-- Moon Icon -->
+            <svg id="theme-moon-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+            </svg>
+          </button>
+
+          <button onclick="syncAllPanels();" class="px-3.5 py-1.5 text-xs font-bold bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all flex items-center gap-1.5 text-zinc-300">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.253 8H18"></path>
+            </svg>
+            Sync Panel
+          </button>
+          <a href="/" class="px-4 py-1.5 text-xs font-bold bg-primary-blue hover:bg-primary-blue/80 text-white rounded-xl transition-all flex items-center gap-1.5">
+            <span>View Public Platform</span>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+            </svg>
+          </a>
+          <button onclick="handleAdminLogout()" class="px-3.5 py-1.5 text-xs font-bold bg-rose-600/15 border border-rose-600/30 hover:bg-rose-600 text-rose-400 hover:text-white rounded-xl transition-all flex items-center gap-1.5">
+            <span>Secure Logout</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+  <!-- MAIN CONTAINER WRAPPER -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-8 space-y-8">
+    
+    <!-- SECTION 1: REAL-TIME USER ENGAGEMENT CHARTS SECTION -->
+    <section class="bg-brand-card p-6 rounded-2xl border border-white/5 shadow-xl space-y-6">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-white/5 pb-4">
+        <div>
+          <h2 class="font-bold text-lg font-display text-white flex items-center gap-2">
+            <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            Real-Time Broadcast Performance & Engagement Analytics
+          </h2>
+          <p class="text-xs text-zinc-400">Live feed monitors detailing concurrent streams, active spectator sessions, and paywall subscription conversions.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-[10px] font-mono bg-zinc-800 text-zinc-300 border border-white/10 px-2.5 py-1 rounded-lg">Telemetry Status: Active</span>
+        </div>
+      </div>
+
+      <!-- Live metrics counters -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Card 1: Active Sessions -->
+        <div class="bg-zinc-950/40 p-4 border border-white/5 rounded-xl flex items-center justify-between">
+          <div class="space-y-1">
+            <span class="text-xs text-zinc-400 font-mono">Active Spectator Sessions</span>
+            <div id="metric-sessions" class="text-2xl font-bold font-display text-primary-blue">...</div>
+          </div>
+          <div class="p-3 bg-primary-blue/10 text-primary-blue rounded-xl">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+          </div>
+        </div>
+
+        <!-- Card 2: Stream Concurrency -->
+        <div class="bg-zinc-950/40 p-4 border border-white/5 rounded-xl flex items-center justify-between">
+          <div class="space-y-1">
+            <span class="text-xs text-zinc-400 font-mono">Stream Concurrency</span>
+            <div id="metric-concurrency" class="text-2xl font-bold font-display text-emerald-400">...</div>
+          </div>
+          <div class="p-3 bg-emerald-400/10 text-emerald-400 rounded-xl">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+          </div>
+        </div>
+
+        <!-- Card 3: Paywall Conversion Rate -->
+        <div class="bg-zinc-950/40 p-4 border border-white/5 rounded-xl flex items-center justify-between">
+          <div class="space-y-1">
+            <span class="text-xs text-zinc-400 font-mono">Subscription Conversion Rate</span>
+            <div id="metric-conversions" class="text-2xl font-bold font-display text-amber-500">...</div>
+          </div>
+          <div class="p-3 bg-amber-500/10 text-amber-500 rounded-xl">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chart plotting canvases -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Left: Sessions and Concurrency Line Chart -->
+        <div class="lg:col-span-8 bg-zinc-950/20 p-4 border border-white/5 rounded-xl">
+          <span class="text-xs text-zinc-400 font-mono tracking-wide uppercase block pb-3">Spectators & Concurrency Streams (Overlay Progression)</span>
+          <div class="relative h-64 md:h-80 w-full flex items-center justify-center">
+            <canvas id="sessions-concurrency-chart" class="w-full h-full"></canvas>
+          </div>
+        </div>
+
+        <!-- Right: Paywall conversion Bar Chart -->
+        <div class="lg:col-span-4 bg-zinc-950/20 p-4 border border-white/5 rounded-xl">
+          <span class="text-xs text-zinc-400 font-mono tracking-wide uppercase block pb-3">Premium Paywall Conversions % Hourly Trend</span>
+          <div class="relative h-64 md:h-80 w-full flex items-center justify-center">
+            <canvas id="conversions-chart" class="w-full h-full"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 2: OPERATION WORKSTATIONS - GRID LAYOUT -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      
+      <!-- LEFT WORKSPACE COLUMN (7 COLS) -->
+      <div class="lg:col-span-7 space-y-8">
+        
+        <!-- ACTIVE SUBSCRIPTIONS & USERS TABLE -->
+        <section class="bg-brand-card p-6 rounded-2xl border border-white/5 shadow-xl space-y-6">
+          <div class="flex items-center justify-between pb-3 border-b border-white/5">
+            <div class="flex items-center gap-3">
+              <div class="p-2.5 bg-indigo-500/10 text-indigo-400 rounded-xl">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+              </div>
+              <div>
+                <h2 class="font-bold text-lg font-display text-white">Active Users & Account Subscriptions</h2>
+                <p class="text-xs text-zinc-400">View registered broadcasting profiles, assess subscription plans, and perform administrative overrides.</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button 
+                onclick="exportUsersToCSV()" 
+                class="p-1 px-2.5 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Export list of registered users and tiers to CSV"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+                <span>Export User Data</span>
+              </button>
+              <button onclick="fetchActiveSubscriptions()" class="p-1 px-2.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-lg text-xs font-semibold cursor-pointer">
+                Reload Users
+              </button>
+            </div>
+          </div>
+
+          <!-- Subscription Stats Summary Indicators -->
+          <div class="grid grid-cols-3 gap-3 text-center">
+            <div class="bg-zinc-950/40 p-2.5 border border-white/5 rounded-xl">
+              <span class="text-[10px] text-zinc-400 font-mono block">VIP Accounts</span>
+              <span id="sub-vip-count" class="text-sm font-bold font-display text-sky-400">0</span>
+            </div>
+            <div class="bg-zinc-950/40 p-2.5 border border-white/5 rounded-xl">
+              <span class="text-[10px] text-zinc-400 font-mono block">Premium Accounts</span>
+              <span id="sub-premium-count" class="text-sm font-bold font-display text-indigo-400">0</span>
+            </div>
+            <div class="bg-zinc-950/40 p-2.5 border border-white/5 rounded-xl">
+              <span class="text-[10px] text-zinc-400 font-mono block">Free Viewer Accounts</span>
+              <span id="sub-free-count" class="text-sm font-bold font-display text-zinc-400">0</span>
+            </div>
+          </div>
+
+          <!-- BULK OVERRIDES CONTROL CONSOLE (HIDDEN BY DEFAULT, REVEALED ON SELECTION) -->
+          <div id="bulk-actions-panel" class="hidden bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-4 space-y-3 transition-all">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+              <div class="text-xs">
+                <span class="font-mono text-[9px] font-bold text-indigo-400 uppercase tracking-wider block">BATCH BULK ACTION CONTROLLER</span>
+                <span id="bulk-selected-count" class="font-bold text-white text-xs">0 accounts currently chosen</span>
+              </div>
+              <button onclick="clearAllSelections()" class="text-[10px] text-zinc-400 hover:text-white underline">Cancel Choices</button>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-3">
+              <!-- Tier selection -->
+              <div class="flex items-center gap-1.5 text-xs">
+                <span class="text-zinc-400">Settle Plan:</span>
+                <select id="bulk-plan-select" class="bg-black/60 border border-white/10 rounded-lg p-1 text-xs text-white outline-none">
+                  <option value="">No Change</option>
+                  <option value="VIP">VIP Tier</option>
+                  <option value="Premium">Premium Tier</option>
+                  <option value="Free">Free Tier</option>
+                </select>
+              </div>
+
+              <!-- Status selection -->
+              <div class="flex items-center gap-1.5 text-xs">
+                <span class="text-zinc-400">Settle Status:</span>
+                <select id="bulk-status-select" class="bg-black/60 border border-white/10 rounded-lg p-1 text-xs text-white outline-none">
+                  <option value="">No Change</option>
+                  <option value="Active">Active</option>
+                  <option value="Suspended">Suspended</option>
+                </select>
+              </div>
+
+              <!-- Apply Button -->
+              <button 
+                onclick="applyBulkAdministration()" 
+                class="ml-auto px-4 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold rounded-lg transition-colors"
+              >
+                Apply Batch Overrides
+              </button>
+            </div>
+          </div>
+
+          <!-- Users list responsive container table -->
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs text-zinc-300 border-collapse">
+              <thead>
+                <tr class="border-b border-white/5 text-[10px] uppercase font-mono tracking-wider text-zinc-400">
+                  <th class="py-3 px-2 w-8">
+                    <input type="checkbox" id="bulk-select-all" onchange="toggleSelectAllUsers(this.checked)" class="rounded bg-black/40 border border-white/10 outline-none w-3.5 h-3.5 cursor-pointer text-primary-blue focus:ring-0 focus:ring-offset-0" />
+                  </th>
+                  <th class="py-3 px-2">Spectator</th>
+                  <th class="py-3 px-2">Tier Level</th>
+                  <th class="py-3 px-2">MTR Status</th>
+                  <th class="py-4 px-2 text-right">Admin Actions</th>
+                </tr>
+              </thead>
+              <tbody id="users-table-body" class="divide-y divide-white/5 font-sans">
+                <!-- Injected via JavaScript -->
+                <tr>
+                  <td colspan="5" class="py-4 text-center text-zinc-500">Resolving subscription tables...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          
+          <div id="user-action-alert" class="hidden p-2.5 rounded-xl text-center text-xs font-bold text-teal-300 bg-teal-500/15 border border-teal-500/10"></div>
+        </section>
+
+        <!-- GLOBAL BROADCAST ALERT MODULE (FCM PUSH TO PLATFORM) -->
+        <section class="bg-brand-card p-6 rounded-2xl border border-white/5 shadow-xl space-y-6">
+          <div class="flex items-center gap-3 pb-3 border-b border-white/5">
+            <div class="p-2.5 bg-amber-500/10 text-amber-400 rounded-xl">
+              <!-- Push Notification Bell Icon -->
+              <svg class="w-5 h-5 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+              </svg>
+            </div>
+            <div>
+              <h2 class="font-bold text-lg font-display text-white">Global Broadcast Alerts Channel (FCM Push)</h2>
+              <p class="text-xs text-zinc-400">Trigger system-wide push alerts that flash in real time to all viewers or stream watchers.</p>
+            </div>
+          </div>
+
+          <form id="broadcast-alert-form" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+              <div class="md:col-span-6 space-y-1">
+                <label class="text-xs text-zinc-300 font-mono">Alert Short Header Title</label>
+                <input 
+                  type="text" 
+                  id="broadcast-title" 
+                  placeholder="e.g., KICKOFF DELAY ALERT!" 
+                  required
+                  class="w-full bg-black/40 border border-white/5 outline-none font-bold rounded-xl px-3 py-2 text-xs transition-colors"
+                />
+              </div>
+              <div class="md:col-span-3 space-y-1">
+                <label class="text-xs text-zinc-300 font-mono">FCM Target Topic</label>
+                <select id="broadcast-topic" class="w-full bg-black/40 border border-white/5 outline-none rounded-xl p-2 text-xs">
+                  <option value="/topics/match_updates" selected>Live Match Updates</option>
+                  <option value="/topics/platform_announcements">Platform Announcements</option>
+                  <option value="/topics/all_spectators">All Active Spectators</option>
+                </select>
+              </div>
+              <div class="md:col-span-3 space-y-1">
+                <label class="text-xs text-zinc-300 font-mono">Alert Tone Status</label>
+                <select id="broadcast-type" class="w-full bg-black/40 border border-white/5 outline-none rounded-xl p-2 text-xs">
+                  <option value="danger">⚠️ Emergency Warning</option>
+                  <option value="warning" selected>🔔 Match Event announcement</option>
+                  <option value="info">💬 Platform announcement</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="space-y-1">
+              <label class="text-xs text-zinc-300 font-mono">Detailed Alert Payload Body Message</label>
+              <textarea 
+                id="broadcast-message" 
+                rows="2" 
+                placeholder="Write message details which instantly flash as push banner to users..." 
+                required
+                class="w-full bg-black/40 border border-white/5 outline-none rounded-xl p-3 text-xs"
+              ></textarea>
+            </div>
+
+            <!-- FCM button rows -->
+            <div class="flex flex-col sm:flex-row gap-3 pt-1">
+              <button 
+                type="submit" 
+                class="flex-1 bg-amber-500 hover:bg-amber-600 text-black font-bold py-2.5 px-4 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 font-display"
+              >
+                📡 Dispatch FCM Global Push Notification
+              </button>
+              <button 
+                type="button" 
+                onclick="dismissActiveBroadcastAlert()"
+                class="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 hover:text-white text-zinc-400 font-semibold rounded-xl text-xs transition-colors"
+              >
+                Dismiss Active Bulletin
+              </button>
+            </div>
+          </form>
+
+          <!-- Active alert warning flash indicator -->
+          <div id="active-fcm-bulletin" class="hidden p-3 rounded-xl text-xs bg-amber-500/10 border border-amber-500/20 text-amber-200">
+            <div class="flex justify-between items-center-start gap-4">
+              <div>
+                <span class="font-mono text-[9px] font-bold text-amber-500 uppercase tracking-wider block">ACTIVE DISPATCHED BULLETIN CHANNEL</span>
+                <span id="active-fcm-title" class="font-bold text-white text-xs block mt-0.5">Title</span>
+                <span id="active-fcm-msg" class="text-zinc-400 mt-1 block">Message details...</span>
+              </div>
+              <button onclick="dismissActiveBroadcastAlert()" class="text-zinc-500 hover:text-white font-bold font-mono text-sm shrink-0">×</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- API CREDENTIALS FORM CARD -->
+        <section class="bg-brand-card p-6 rounded-2xl border border-white/5 shadow-xl space-y-6">
+          <div class="flex items-center gap-3 pb-3 border-b border-white/5">
+            <svg class="w-5 h-5 text-primary-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+            <div>
+              <h2 class="font-bold text-base font-display text-white">API Feed Credentials Synchronizer</h2>
+              <p class="text-xs text-zinc-400">Configure core integrations that run live feeds, highlight summaries, and database systems.</p>
+            </div>
+          </div>
+
+          <form id="api-config-form" class="space-y-4">
+            <!-- Row 1: Token API-Football -->
+            <div class="space-y-1.5">
+              <div class="flex justify-between items-center">
+                <label class="text-xs font-mono text-zinc-300">API-Football Token Secret</label>
+                <span id="masked-football" class="text-[10px] font-mono text-zinc-500">****</span>
+              </div>
+              <div class="flex gap-2">
+                <input 
+                  type="text" 
+                  id="api-football-key" 
+                  placeholder="Enter API-Football Key..." 
+                  class="flex-1 bg-black/40 border border-white/5 focus:border-primary-blue/50 outline-none rounded-xl px-3 py-2 text-xs font-mono text-zinc-200 transition-all"
+                />
+                <button 
+                  type="button" 
+                  onclick="testSingleConnection('API-Football', 'api-football-key')"
+                  class="px-3 py-2 bg-white/5 hover:bg-white/10 text-white font-semibold text-xs rounded-xl shrink-0 transition-all border border-white/10"
+                >
+                  Test Key
+                </button>
+              </div>
+              <div id="test-output-API-Football" class="hidden text-[10px] font-mono p-2 border-l-2 rounded-r-lg bg-zinc-900 border-white/15"></div>
+            </div>
+
+            <!-- Row 2: SportMonks -->
+            <div class="space-y-1.5">
+              <div class="flex justify-between items-center">
+                <label class="text-xs font-mono text-zinc-300">SportMonks Roster Feed Key</label>
+                <span id="masked-sportmonks" class="text-[10px] font-mono text-zinc-500">****</span>
+              </div>
+              <div class="flex gap-2">
+                <input 
+                  type="text" 
+                  id="sportmonks-key" 
+                  placeholder="Enter SportMonks Key..." 
+                  class="flex-1 bg-black/40 border border-white/5 focus:border-primary-blue/50 outline-none rounded-xl px-3 py-2 text-xs font-mono text-zinc-200 transition-all"
+                />
+                <button 
+                  type="button" 
+                  onclick="testSingleConnection('SportMonks', 'sportmonks-key')"
+                  class="px-3 py-2 bg-white/5 hover:bg-white/10 text-white font-semibold text-xs rounded-xl shrink-0 transition-all border border-white/10"
+                >
+                  Test
+                </button>
+              </div>
+              <div id="test-output-SportMonks" class="hidden text-[10px] font-mono p-2 border-l-2 rounded-r-lg bg-zinc-900 border-white/15"></div>
+            </div>
+
+            <!-- Grid Row: Mux and NewsAPI -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="space-y-1.5">
+                <label class="text-xs font-mono text-zinc-300">Mux Platform Stream Key</label>
+                <input 
+                  type="text" 
+                  id="mux-key" 
+                  placeholder="Enter Mux Token Key" 
+                  class="w-full bg-black/40 border border-white/5 focus:border-primary-blue/50 outline-none rounded-xl px-3 py-2 text-xs font-mono text-zinc-200 transition-all"
+                />
+              </div>
+              <div class="space-y-1.5">
+                <label class="text-xs font-mono text-zinc-300">Cloudflare Stream Edge Secret</label>
+                <input 
+                  type="text" 
+                  id="cloudflare-key" 
+                  placeholder="Enter Cloudflare Secret" 
+                  class="w-full bg-black/40 border border-white/5 focus:border-primary-blue/50 outline-none rounded-xl px-3 py-2 text-xs font-mono text-zinc-200 transition-all"
+                />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="space-y-1.5">
+                <label class="text-xs font-mono text-zinc-300">NewsAPI Token Key</label>
+                <input 
+                  type="text" 
+                  id="news-api-key" 
+                  placeholder="Enter NewsAPI Key" 
+                  class="w-full bg-black/40 border border-white/5 focus:border-primary-blue/50 outline-none rounded-xl px-3 py-2 text-xs font-mono text-zinc-200 transition-all"
+                />
+              </div>
+              <div class="space-y-1.5">
+                <label class="text-xs font-mono text-zinc-300">Google Analytics G-ID</label>
+                <input 
+                  type="text" 
+                  id="ga-id" 
+                  placeholder="G-XXXXXXXXXX" 
+                  class="w-full bg-black/40 border border-white/5 focus:border-primary-blue/50 outline-none rounded-xl px-3 py-2 text-xs font-mono text-zinc-200 transition-all"
+                />
+              </div>
+            </div>
+
+            <div class="space-y-1.5">
+              <div class="flex justify-between items-center">
+                <label class="text-xs font-mono text-zinc-300">Firebase Client Configuration SDK Web Key</label>
+                <span id="masked-firebase" class="text-[10px] font-mono text-zinc-500">****</span>
+              </div>
+              <input 
+                type="text" 
+                id="firebase-key" 
+                placeholder="Enter Firebase Project Client SDK Configuration JSON or Core Key" 
+                class="w-full bg-black/40 border border-white/5 focus:border-primary-blue/50 outline-none rounded-xl px-3 py-2 text-xs font-mono text-zinc-200 transition-all"
+              />
+            </div>
+
+            <!-- Row: ESPN API Key -->
+            <div class="space-y-1.5">
+              <div class="flex justify-between items-center">
+                <label class="text-xs font-mono text-zinc-300">ESPN Core Gate-Access Key</label>
+                <span id="masked-espn" class="text-[10px] font-mono text-zinc-500">****</span>
+              </div>
+              <div class="flex gap-2">
+                <input 
+                  type="text" 
+                  id="espn-api-key" 
+                  placeholder="Enter ESPN API Key (Leave default for public scoreboards)..." 
+                  class="flex-1 bg-black/40 border border-white/5 focus:border-primary-blue/50 outline-none rounded-xl px-3 py-2 text-xs font-mono text-zinc-200 transition-all"
+                />
+                <button 
+                  type="button" 
+                  onclick="testSingleConnection('ESPN', 'espn-api-key')"
+                  class="px-3 py-2 bg-white/5 hover:bg-white/10 text-white font-semibold text-xs rounded-xl shrink-0 transition-all border border-white/10"
+                >
+                  Test Key
+                </button>
+              </div>
+              <div id="test-output-ESPN" class="hidden text-[10px] font-mono p-2 border-l-2 rounded-r-lg bg-zinc-900 border-white/15"></div>
+            </div>
+
+            <!-- Commit button -->
+            <div class="pt-4">
+              <button 
+                type="submit" 
+                class="w-full bg-primary-blue hover:bg-primary-blue/90 text-white font-bold py-3 px-4 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-primary-blue/20"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+                Commit Configuration Keys
+              </button>
+            </div>
+          </form>
+
+          <div id="save-alert" class="hidden p-3 rounded-xl text-xs font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/20 text-center">
+            API Configuration saved successfully on active backend!
+          </div>
+        </section>
+
+      </div>
+
+      <!-- RIGHT ACTION PANEL: SCORE MODERATOR & HEALTH (5 COLS) -->
+      <div class="lg:col-span-5 space-y-8">
+        
+        <!-- SCOREBOARD GOAL CREATOR PANEL -->
+        <section class="bg-brand-card p-6 rounded-2xl border border-white/5 shadow-xl space-y-6">
+          <div class="flex items-center gap-3 pb-3 border-b border-white/5">
+            <svg class="w-5 h-5 text-secondary-green animate-spin-slow" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            <div>
+              <h2 class="font-bold text-base font-display text-white">Scoreboard Modifier</h2>
+              <p class="text-xs text-zinc-400">Trigger manual goal events and broadcast updates directly to connected stream tickers.</p>
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <!-- Active match select -->
+            <div class="space-y-1.5">
+              <label class="text-xs text-zinc-300 block font-mono">Select Target Stream Match</label>
+              <select id="match-selector" onchange="onSelectMatchChange()" class="w-full bg-black/40 border border-white/5 outline-none rounded-xl p-2.5 text-xs text-zinc-200">
+                <option value="">Loading matches...</option>
+              </select>
+            </div>
+
+            <!-- Goal elements data -->
+            <div class="p-3.5 bg-zinc-950/40 border border-white/5 rounded-xl space-y-1">
+              <span class="text-[10px] text-zinc-500 block uppercase font-mono tracking-widest">Active Scoreboard Info</span>
+              <div id="active-score-display" class="text-sm font-semibold text-primary-blue py-1">
+                Select a match
+              </div>
+            </div>
+
+            <!-- Scorer fields -->
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="text-[10px] text-zinc-400 block pb-1">Scorer (e.g. Mbappé)</label>
+                <input type="text" id="scorer-name" placeholder="Name" class="w-full bg-black/40 border border-white/5 rounded-xl p-2 text-xs" />
+              </div>
+              <div>
+                <label class="text-[10px] text-zinc-400 block pb-1">Assist Provider</label>
+                <input type="text" id="assist-name" placeholder="Name" class="w-full bg-black/40 border border-white/5 rounded-xl p-2 text-xs" />
+              </div>
+            </div>
+
+            <!-- Triggers -->
+            <div class="grid grid-cols-2 gap-2 pt-1">
+              <button 
+                type="button" 
+                onclick="triggerManualGoal('home')"
+                class="py-2.5 bg-primary-blue hover:bg-primary-blue/85 text-white font-semibold text-xs rounded-xl transition-all shadow-md"
+              >
+                ⚽ Goal Home Team
+              </button>
+              <button 
+                type="button" 
+                onclick="triggerManualGoal('away')"
+                class="py-2.5 bg-secondary-green hover:bg-secondary-green/85 text-white font-semibold text-xs rounded-xl transition-all shadow-md"
+              >
+                ⚽ Goal Away Team
+              </button>
+            </div>
+
+            <div class="text-center pt-2">
+              <button 
+                type="button" 
+                onclick="resetMatchSim()"
+                class="text-[11px] text-zinc-500 hover:text-white underline transition-colors"
+              >
+                Reset score back to initial state
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- API SYSTEM STATUS CARD -->
+        <section class="bg-gradient-to-br from-brand-card to-[#0c0a1a] p-6 rounded-2xl border border-white/5 space-y-4" id="api-system-status-container">
+          <div class="flex items-center justify-between border-b border-white/5 pb-2">
+            <h2 class="font-bold text-[11px] text-zinc-200 uppercase tracking-widest font-mono flex items-center gap-1.5">
+              <span id="health-pulse-indicator" class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+              API SYSTEM GATEWAYS STATUS
+            </h2>
+            <div class="flex items-center gap-2">
+              <button 
+                onclick="triggerImmediateHealthPoll()" 
+                id="refresh-health-btn"
+                class="px-2 py-0.5 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded border border-emerald-500/30 text-[9px] font-mono transition-colors flex items-center gap-1 cursor-pointer"
+                title="Force refresh system health status immediately"
+              >
+                <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.253 8H18"></path>
+                </svg>
+                <span>Refresh Health Status</span>
+              </button>
+              <span class="text-[8px] font-mono uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded">Active Polling</span>
+            </div>
+          </div>
+          
+          <div id="services-health-list" class="space-y-3.5">
+            <!-- Dynamically populated via script -->
+            <div class="text-center py-2 text-xs text-zinc-500">Checking microservices integrity...</div>
+          </div>
+        </section>
+
+        <!-- REALTIME REPAIR & AUDIT LOGS CONTAINER WITH EXPORT BUTTONS -->
+        <section class="bg-black/95 rounded-2xl border border-white/5 p-4 space-y-3">
+          <div class="flex justify-between items-center pb-2 border-b border-white/10">
+            <div class="flex items-center gap-2">
+              <span class="text-[9px] font-mono tracking-wider uppercase text-zinc-400 font-bold">Admin Activity Action Logs</span>
+              <span class="h-2 w-2 rounded-full bg-indigo-500 animate-pulse"></span>
+            </div>
+            <!-- Log Export Buttons & Toggle Panel visibility -->
+            <div class="flex gap-2 text-[9px] font-mono">
+              <button 
+                onclick="toggleLogsCardBody()" 
+                id="toggle-logs-visibility-btn"
+                class="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded border border-white/10 transition-colors cursor-pointer"
+                title="Collapse or expand administrative activity logs layout"
+              >
+                Collapse
+              </button>
+              <button 
+                onclick="exportLogs('json')" 
+                class="px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-350 hover:text-white rounded border border-white/10 transition-colors cursor-pointer"
+                title="Export telemetry logs as JSON format for audit"
+              >
+                [JSON]
+              </button>
+              <button 
+                onclick="exportLogs('csv')" 
+                class="px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-350 hover:text-white rounded border border-white/10 transition-colors cursor-pointer"
+                title="Export telemetry logs as CSV spreadsheet format for audit"
+              >
+                [CSV]
+              </button>
+            </div>
+          </div>
+          
+          <div id="logs-card-content" class="space-y-3 transition-all">
+            <!-- Search logs input bar -->
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none text-zinc-500">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+              </span>
+              <input 
+                type="text" 
+                id="logs-search" 
+                placeholder="Filter logs by actor, action descriptor or state..." 
+                oninput="filterLogsList(this.value)"
+                class="w-full bg-zinc-950 border border-white/5 outline-none font-mono text-[10px] rounded-lg pl-8 pr-3 py-1.5 text-zinc-300 placeholder-zinc-500 focus:border-indigo-500/40 transition-colors"
+              />
+            </div>
+
+            <div id="logs-container" class="space-y-1.5 max-h-48 overflow-y-auto text-[10px] font-mono text-zinc-400 divide-y divide-white/5">
+              <!-- Active logging logs generated dynamically & live database records logs are fetched -->
+              <div class="text-zinc-500">[17:18:01] Decoupled Admin Panel client handshaking...</div>
+              <div class="text-emerald-500">[17:18:02] Connected to main express proxy at http://0.0.0.0:3000</div>
+              <div class="text-zinc-500 font-bold">[17:18:02] Session monitoring status check configured.</div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </main>
+
+  </div> <!-- Close admin-main-dashboard wrapper -->
+
+  <!-- DEEP FOOTER BRAND -->
+  <footer class="bg-brand-card/30 border-t border-white/5 mt-auto py-6 px-4 text-center text-xs text-zinc-500">
+    <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+      <span>© 2026 AdSLiveTv Sports Broadcast Corp • Admin Controls Decoupled Suite</span>
+      <div class="flex gap-4">
+        <a href="/" class="hover:text-white">Back to Home Surface</a>
+        <span>•</span>
+        <a href="/api/matches" target="_blank" class="hover:text-white">Matches JSON Feed</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- SCRIPTING HANDLERS -->
+  <script>
+    let activeMatches = [];
+    let selectedMatchId = "";
+    let usersList = [];
+    let isThemeLight = false;
+    let logsArray = [
+      { time: "17:18:01", message: "Decoupled Admin Panel client handshaking...", type: "info" },
+      { time: "17:18:02", message: "Connected to main express proxy at http://0.0.0.0:3000", type: "success" },
+      { time: "17:18:02", message: "Initializing database credentials validation.", type: "info" }
+    ];
+
+    // Chart.js references
+    let sessionsConcurrencyChartRef = null;
+    let conversionsChartRef = null;
+
+    // Simulated log generator & log storing
+    const logsContainer = document.getElementById("logs-container");
+    function appendLog(text, type = 'info') {
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+      
+      logsArray.push({ time: timeStr, message: text, type });
+      
+      const div = document.createElement("div");
+      if (type === 'success') {
+        div.className = "text-emerald-400";
+      } else if (type === 'error') {
+        div.className = "text-red-400";
+      } else {
+        div.className = "text-zinc-400";
+      }
+      div.innerText = `[${timeStr}] ${text}`;
+      logsContainer.appendChild(div);
+      logsContainer.scrollTop = logsContainer.scrollHeight;
+    }
+
+    // Export logs (JSON/CSV)
+    function exportLogs(format) {
+      if (!serverAuditLogsRef || serverAuditLogsRef.length === 0) {
+        appendLog(`No backend event logs available for export.`, "error");
+        alert("No backend event logs available to export yet. Please wait.");
+        return;
+      }
+      
+      appendLog(`Exporting ${serverAuditLogsRef.length} backend event logs in ${format.toUpperCase()} format...`);
+      
+      if (format === 'json') {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(serverAuditLogsRef, null, 2));
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", `adslivetv_backend_audit_logs_${Date.now()}.json`);
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+        appendLog(`Backend logs dispatched for local JSON download successfully!`, "success");
+      } else if (format === 'csv') {
+        let csvContent = "";
+        // Headers
+        csvContent += "Timestamp,Actor,Action,Status\n";
+        serverAuditLogsRef.forEach(row => {
+          const sanitizedAction = (row.action || "").replace(/"/g, '""');
+          csvContent += `"${row.timestamp || ''}","${row.actor || ''}","${sanitizedAction}","${row.status || ''}"\n`;
+        });
+        
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute("href", url);
+        downloadAnchor.setAttribute("download", `adslivetv_backend_audit_logs_${Date.now()}.csv`);
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+        appendLog(`Backend logs dispatched for local CSV download successfully!`, "success");
+      }
+    }
+
+    // Toggle light / dark mode themes
+    function toggleTheme() {
+      isThemeLight = !isThemeLight;
+      const htmlEl = document.documentElement;
+      const sunIcon = document.getElementById("theme-sun-icon");
+      const moonIcon = document.getElementById("theme-moon-icon");
+
+      if (isThemeLight) {
+        htmlEl.classList.add("light-mode");
+        htmlEl.classList.remove("dark");
+        sunIcon.classList.remove("hidden");
+        moonIcon.classList.add("hidden");
+        appendLog("Applied accessible Late-Night Light Mode background overrides.", "info");
+      } else {
+        htmlEl.classList.remove("light-mode");
+        htmlEl.classList.add("dark");
+        sunIcon.classList.add("hidden");
+        moonIcon.classList.remove("hidden");
+        appendLog("Restored standard Late-Night Dark Mode visual interface.", "info");
+      }
+
+      // Re-trigger chart rendering with customized ticks color configuration
+      refreshChartStyles();
+    }
+
+    // Periodically add ambient logs to enhance professional visual aesthetics
+    setInterval(() => {
+      const msgs = [
+        "DB connection pool handshake checked: OK",
+        "Edge cached match tickers flushed successfully.",
+        "System statistics: CPU 2.4%, RAM 188MB/1024MB",
+        "Refreshed live spectators tally metrics.",
+        "Secure cookie tokens validation: [ACTIVE]",
+        "Active sessions concurrency polling finished."
+      ];
+      const r = Math.floor(Math.random() * msgs.length);
+      appendLog(msgs[r]);
+    }, 15000);
+
+    // Sync all dashboard elements
+    async function syncAllPanels() {
+      appendLog("Forcing complete system dashboard synchronization...");
+      await fetchAdminConfig();
+      await loadActiveMatches();
+      await fetchActiveSubscriptions();
+      await fetchRealTimeMetrics();
+      await fetchActiveBroadcastAlert();
+      appendLog("Dashboard modules synchronized with running Node server context.", "success");
+    }
+
+    // Initial config fetching and inputs mapping
+    async function fetchAdminConfig() {
+      try {
+        const res = await fetch("/api/admin/config");
+        if (res.ok) {
+          const data = await res.json();
+          appendLog("Fetched central system credentials.");
+          
+          // Map masked data indicators
+          if (data.masked) {
+            document.getElementById("masked-football").innerText = data.masked.apiFootballKey || "N/A";
+            document.getElementById("masked-sportmonks").innerText = data.masked.sportMonksKey || "N/A";
+            document.getElementById("masked-firebase").innerText = data.masked.firebaseKey || "N/A";
+            document.getElementById("masked-espn").innerText = data.masked.espnApiKey || "N/A";
+          }
+          
+          // Fill inputs
+          if (data.actual) {
+            document.getElementById("api-football-key").value = data.actual.apiFootballKey || "";
+            document.getElementById("sportmonks-key").value = data.actual.sportMonksKey || "";
+            document.getElementById("mux-key").value = data.actual.muxKey || "";
+            document.getElementById("cloudflare-key").value = data.actual.cloudflareStreamKey || "";
+            document.getElementById("news-api-key").value = data.actual.newsApiKey || "";
+            document.getElementById("ga-id").value = data.actual.googleAnalyticsId || "";
+            document.getElementById("firebase-key").value = data.actual.firebaseKey || "";
+            document.getElementById("espn-api-key").value = data.actual.espnApiKey || "";
+          }
+        }
+      } catch (err) {
+        appendLog("Error calling core credentials endpoint: " + err.message, "error");
+      }
+    }
+
+    // Test a single API token
+    async function testSingleConnection(provider, inputId) {
+      const val = document.getElementById(inputId).value;
+      const display = document.getElementById(`test-output-${provider}`);
+      display.classList.remove("hidden");
+      display.style.borderLeftColor = "#3b82f6";
+      display.style.color = "#d1d5db";
+      display.innerHTML = `Running handshake check with <b>${provider}</b>...`;
+      
+      appendLog(`Triggered connection diagnostic flow for ${provider}...`);
+      
+      try {
+        const res = await fetch("/api/admin/test-connection", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ provider, key: val })
+        });
+        if (res.ok) {
+          const result = await res.json();
+          const isActive = result.status === "ACTIVE";
+          
+          display.style.borderLeftColor = isActive ? "#10b981" : "#ef4444";
+          display.style.color = isActive ? "#a7f3d0" : "#fca5a5";
+          display.innerHTML = `Status: <b>${result.status}</b> | Latency: ${result.latency || 'N/A'} <br/> <span class="text-zinc-400 text-[9px] block">${result.details}</span>`;
+          appendLog(`${provider} diagnostic result received: ${result.status}`, isActive ? "success" : "error");
+        }
+      } catch (err) {
+        display.style.borderLeftColor = "#ef4444";
+        display.style.color = "#fca5a5";
+        display.innerHTML = `Error: Failed connection handshake to administrative network wrapper.`;
+        appendLog(`Diagnostic connection failed: ${err.message}`, "error");
+      }
+    }
+
+    // Submit core keys
+    document.getElementById("api-config-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      appendLog("Committing credentials payload...");
+      
+      const payload = {
+        apiFootballKey: document.getElementById("api-football-key").value,
+        sportMonksKey: document.getElementById("sportmonks-key").value,
+        muxKey: document.getElementById("mux-key").value,
+        cloudflareStreamKey: document.getElementById("cloudflare-key").value,
+        newsApiKey: document.getElementById("news-api-key").value,
+        googleAnalyticsId: document.getElementById("ga-id").value,
+        firebaseKey: document.getElementById("firebase-key").value,
+        espnApiKey: document.getElementById("espn-api-key").value
+      };
+
+      try {
+        const res = await fetch("/api/admin/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          appendLog("API Configuration saved to Express process context.", "success");
+          
+          const alertEl = document.getElementById("save-alert");
+          alertEl.classList.remove("hidden");
+          setTimeout(() => alertEl.classList.add("hidden"), 4000);
+          
+          // Refresh masked
+          fetchAdminConfig();
+        }
+      } catch (err) {
+        appendLog("Save credentials error: " + err.message, "error");
+      }
+    });
+
+    // Fetch active users list / subscriptions info
+    async function fetchActiveSubscriptions() {
+      // Don't fetch if not logged in
+      if (localStorage.getItem("admin_session_token") !== "session_token_adslivetv_2026_xyz") return;
+
+      try {
+        const res = await fetch("/api/admin/users");
+        if (res.ok) {
+          usersList = await res.json();
+          renderActiveSubscriptionsTable(usersList);
+        }
+      } catch (err) {
+        appendLog("Failed to fetch active subscription database: " + err.message, "error");
+      }
+    }
+
+    // Render subscriptions table with multi-select checkboxes
+    function renderActiveSubscriptionsTable(users) {
+      const tbody = document.getElementById("users-table-body");
+      tbody.innerHTML = "";
+
+      let vipCount = 0;
+      let premCount = 0;
+      let freeCount = 0;
+
+      users.forEach(u => {
+        if (u.subscriptionPlan === "VIP") vipCount++;
+        else if (u.subscriptionPlan === "Premium") premCount++;
+        else freeCount++;
+
+        const tr = document.createElement("tr");
+        tr.className = "border-b border-white/5 hover:bg-white/5 transition-colors font-sans";
+        
+        // Subscription Tier Badge
+        let badgeStyle = "bg-zinc-800 text-zinc-300";
+        if (u.subscriptionPlan === "VIP") badgeStyle = "bg-sky-500/10 text-sky-400 border border-sky-500/30";
+        else if (u.subscriptionPlan === "Premium") badgeStyle = "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20";
+
+        // Status badge
+        const isSuspended = u.status === "Suspended";
+        let statusBadge = `<span class="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-emerald-500/15 text-emerald-400">ACTIVE</span>`;
+        if (isSuspended) {
+          statusBadge = `<span class="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-rose-500/20 text-rose-400 animate-pulse">SUSPENDED</span>`;
+        }
+
+        tr.innerHTML = `
+          <td class="py-3.5 px-2">
+            <input type="checkbox" data-user-id="${u.id}" class="user-row-checkbox rounded bg-black/40 border border-white/10 outline-none w-3.5 h-3.5 cursor-pointer text-indigo-500 focus:ring-0 focus:ring-offset-0" onchange="updateBulkActionMenuVisibility()" />
+          </td>
+          <td class="py-3.5 px-2">
+            <span class="font-bold text-white block text-sm">${u.name}</span>
+            <span class="text-[10px] text-zinc-500 font-mono">${u.email}</span>
+          </td>
+          <td class="py-3.5 px-2">
+            <span class="px-2.5 py-1 text-[10px] font-mono font-bold rounded-lg ${badgeStyle}">${u.subscriptionPlan}</span>
+          </td>
+          <td class="py-3.5 px-2">${statusBadge}</td>
+          <td class="py-3.5 px-2 text-right">
+            <div class="flex items-center justify-end gap-1.5 font-sans">
+              <select 
+                onchange="overrideUserSubscription('${u.id}', this.value, '${u.status}')" 
+                class="bg-black/40 border border-zinc-700/60 rounded-lg p-1 text-[11px] outline-none cursor-pointer text-zinc-200"
+              >
+                <option value="VIP" ${u.subscriptionPlan === "VIP" ? "selected" : ""}>VIP Tier</option>
+                <option value="Premium" ${u.subscriptionPlan === "Premium" ? "selected" : ""}>Premium Tier</option>
+                <option value="Free" ${u.subscriptionPlan === "Free" ? "selected" : ""}>Free Tier</option>
+              </select>
+              <button 
+                onclick="overrideUserStatus('${u.id}', '${u.subscriptionPlan}', ${isSuspended ? "'Active'" : "'Suspended'"})"
+                class="px-2 py-1 rounded-lg font-mono text-[10px] uppercase font-bold transition-all ${isSuspended ? 'bg-emerald-500 text-black hover:bg-emerald-400' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500 hover:text-white'}"
+              >
+                ${isSuspended ? "Activate" : "Suspend"}
+              </button>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // Update counters
+      document.getElementById("sub-vip-count").innerText = vipCount;
+      document.getElementById("sub-premium-count").innerText = premCount;
+      document.getElementById("sub-free-count").innerText = freeCount;
+
+      // Handle Select All check reset
+      const selectAllBox = document.getElementById("bulk-select-all");
+      if (selectAllBox) selectAllBox.checked = false;
+      updateBulkActionMenuVisibility();
+    }
+
+    // Toggle Check Selection for all sub-accounts
+    function toggleSelectAllUsers(isChecked) {
+      const checkboxes = document.querySelectorAll(".user-row-checkbox");
+      checkboxes.forEach(cb => {
+        cb.checked = isChecked;
+      });
+      updateBulkActionMenuVisibility();
+    }
+
+    // Monitor checkbox counters and update panel interface visibility
+    function updateBulkActionMenuVisibility() {
+      const checkboxes = document.querySelectorAll(".user-row-checkbox");
+      let count = 0;
+      checkboxes.forEach(cb => {
+        if (cb.checked) count++;
+      });
+      
+      const panel = document.getElementById("bulk-actions-panel");
+      const countLabel = document.getElementById("bulk-selected-count");
+      
+      if (count > 0) {
+        countLabel.innerText = `${count} subscriber accounts selected for batch administrative overrides`;
+        panel.classList.remove("hidden");
+      } else {
+        panel.classList.add("hidden");
+      }
+    }
+
+    // Unselect selections
+    function clearAllSelections() {
+      toggleSelectAllUsers(false);
+    }
+
+    // Apply bulk administration override on checked users List
+    async function applyBulkAdministration() {
+      const checkboxes = document.querySelectorAll(".user-row-checkbox");
+      const userIds = [];
+      checkboxes.forEach(cb => {
+        if (cb.checked) {
+          userIds.push(cb.getAttribute("data-user-id"));
+        }
+      });
+      
+      if (userIds.length === 0) return;
+      
+      const planSelect = document.getElementById("bulk-plan-select");
+      const statusSelect = document.getElementById("bulk-status-select");
+      
+      const plan = planSelect.value || undefined;
+      const status = statusSelect.value || undefined;
+      
+      if (!plan && !status) {
+        alert("Please select at least one Plan or Status metric option to apply in batch.");
+        return;
+      }
+      
+      appendLog(`Sending batch bulk overrides on ${userIds.length} accounts...`);
+      try {
+        const res = await fetch("/api/admin/users/bulk-update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userIds, plan, status })
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          appendLog(`Batch bulk parameters executed on ${data.updatedCount} spectator files!`, "success");
+          
+          planSelect.value = "";
+          statusSelect.value = "";
+          clearAllSelections();
+          
+          // Re-render visual list
+          renderActiveSubscriptionsTable(data.users);
+          triggerFeedbackAlert(`Successfully updated ${data.updatedCount} selected accounts in bulk!`);
+          
+          await fetchAuditLogsAndRender();
+        }
+      } catch (err) {
+        appendLog(`Batch bulk update query failed: ${err.message}`, "error");
+      }
+    }
+
+    // Override User plan via dropdown select
+    async function overrideUserSubscription(id, proposedPlan, currentStatus) {
+      appendLog(`Sending subscription modification payload for User ID: ${id}...`);
+      await submitUserUpdate(id, proposedPlan, currentStatus);
+    }
+
+    // Override status via toggle suspension
+    async function overrideUserStatus(id, currentPlan, proposedStatus) {
+      appendLog(`Sending account status override payload for User ID: ${id}...`);
+      await submitUserUpdate(id, currentPlan, proposedStatus);
+    }
+
+    // Put payload update
+    async function submitUserUpdate(id, plan, status) {
+      try {
+        const res = await fetch(`/api/admin/users/${id}/update`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ plan, status })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          appendLog(`Account metrics for user updated to: [Plan: ${data.user.subscriptionPlan} | Status: ${data.user.status}]`, "success");
+          
+          triggerFeedbackAlert(`User ${data.user.name}'s account state was modified successfully!`);
+          
+          // Re-trigger visual table update
+          renderActiveSubscriptionsTable(data.users);
+          await fetchAuditLogsAndRender();
+        }
+      } catch (err) {
+        appendLog(`Sub-Account updating failed: ${err.message}`, "error");
+      }
+    }
+
+    function triggerFeedbackAlert(message) {
+      const alertEl = document.getElementById("user-action-alert");
+      alertEl.innerText = message;
+      alertEl.classList.remove("hidden");
+      setTimeout(() => alertEl.classList.add("hidden"), 3500);
+    }
+
+    // Load available matches for modifier dropdown
+    async function loadActiveMatches() {
+      try {
+        const res = await fetch("/api/matches");
+        if (res.ok) {
+          activeMatches = await res.json();
+          appendLog(`Loaded ${activeMatches.length} broadcast matchups from ticker feed.`);
+          
+          const selector = document.getElementById("match-selector");
+          selector.innerHTML = "";
+          
+          activeMatches.forEach(m => {
+            const opt = document.createElement("option");
+            opt.value = m.id;
+            opt.innerText = `${m.homeTeam} vs ${m.awayTeam} (${m.status === 'LIVE' ? 'LIVE' : 'FINISHED/UPCOMING'})`;
+            selector.appendChild(opt);
+          });
+          
+          if (activeMatches.length > 0) {
+            if (!selectedMatchId || !activeMatches.find(m => m.id === selectedMatchId)) {
+              selectedMatchId = activeMatches[0].id;
+            }
+            selector.value = selectedMatchId;
+            updateActiveScoreDisplay();
+          }
+        }
+      } catch (err) {
+        appendLog("Failed to fetch matches tree: " + err.message, "error");
+      }
+    }
+
+    function onSelectMatchChange() {
+      selectedMatchId = document.getElementById("match-selector").value;
+      updateActiveScoreDisplay();
+    }
+
+    function updateActiveScoreDisplay() {
+      const match = activeMatches.find(m => m.id === selectedMatchId);
+      const display = document.getElementById("active-score-display");
+      if (match) {
+        display.innerHTML = `
+          <div class="flex items-center justify-between text-zinc-300">
+            <span class="font-bold text-white">${match.homeTeam}</span>
+            <span class="bg-black/40 px-3 py-1 text-sm font-mono font-bold rounded-lg border border-white/5 mx-2 text-primary-blue">${match.homeScore} - ${match.awayScore}</span>
+            <span class="font-bold text-white">${match.awayTeam}</span>
+          </div>
+          <div class="text-[10px] text-zinc-400 font-mono text-center mt-1.5 uppercase">
+            Status: ${match.status} | Minute: ${match.minute || '0'}'
+          </div>
+        `;
+      } else {
+        display.innerHTML = "Select a valid broadcast match from the dashboard.";
+      }
+    }
+
+    // Trigger score goal simulation
+    async function triggerManualGoal(team) {
+      if (!selectedMatchId) {
+        alert("Please select a target match first.");
+        return;
+      }
+      
+      const scorer = document.getElementById("scorer-name").value || "Super Substitute";
+      const assist = document.getElementById("assist-name").value;
+      const detail = assist ? `Beautiful set up play by ${assist}. Completed with absolute style.` : "Stunning fast shot converts immediately!";
+      
+      appendLog(`Sending goal updates to express server for ${team} team...`);
+      
+      try {
+        const res = await fetch(`/api/matches/${selectedMatchId}/goal`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ team, player: scorer, detail })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          appendLog(`Match scoreboard successfully corrected to ${data.match.homeScore} - ${data.match.awayScore}!`, "success");
+          
+          // Play interactive audio alert beep
+          playSubtleBeep("score");
+          
+          // Clear forms
+          document.getElementById("scorer-name").value = "";
+          document.getElementById("assist-name").value = "";
+          
+          // Refresh lists
+          await loadActiveMatches();
+        }
+      } catch (err) {
+        appendLog(`Score modification failed: ${err.message}`, "error");
+      }
+    }
+
+    // Reset match simulated scores
+    async function resetMatchSim() {
+      if (!selectedMatchId) return;
+      appendLog(`Sending restore fallback request for match ${selectedMatchId}...`);
+      
+      try {
+        const res = await fetch(`/api/matches/${selectedMatchId}/reset`, {
+          method: "POST"
+        });
+        if (res.ok) {
+          appendLog("Reset endpoint complete. Broadcast state restored to original settings.", "success");
+          await loadActiveMatches();
+        }
+      } catch (err) {
+        appendLog(`Failed to reset match state: ${err.message}`, "error");
+      }
+    }
+
+    // --- BROADCAST ALERTS (FCM PUSH SYSTEM) ---
+    const broadcastForm = document.getElementById("broadcast-alert-form");
+    broadcastForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      
+      const title = document.getElementById("broadcast-title").value;
+      const topic = document.getElementById("broadcast-topic").value;
+      const type = document.getElementById("broadcast-type").value;
+      const message = document.getElementById("broadcast-message").value;
+
+      appendLog(`Dispatching FCM Push notification to topic ${topic}...`);
+      
+      try {
+        const res = await fetch("/api/admin/broadcast", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, topic, type, message })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          appendLog(`FCM Global broadcast bulletin pushed successfully title: "${data.alert.title}"`, "success");
+          
+          // Play interactive audio alert beep
+          playSubtleBeep("alert");
+          
+          // Clear text fields
+          document.getElementById("broadcast-title").value = "";
+          document.getElementById("broadcast-message").value = "";
+          
+          // Refresh active bullet alert indicator
+          await fetchActiveBroadcastAlert();
+        }
+      } catch (err) {
+        appendLog(`Failed to deploy public banner bulletin alert: ${err.message}`, "error");
+      }
+    });
+
+    async function fetchActiveBroadcastAlert() {
+      try {
+        const res = await fetch("/api/broadcast/active");
+        if (res.ok) {
+          const data = await res.json();
+          const activeContainer = document.getElementById("active-fcm-bulletin");
+          
+          if (data.alert) {
+            document.getElementById("active-fcm-title").innerText = `[${data.alert.type.toUpperCase()}] ${data.alert.title}`;
+            document.getElementById("active-fcm-msg").innerText = data.alert.message;
+            activeContainer.classList.remove("hidden");
+          } else {
+            activeContainer.classList.add("hidden");
+          }
+        }
+      } catch (err) {
+        console.warn("Could not load current broadcast bulletin", err);
+      }
+    }
+
+    async function dismissActiveBroadcastAlert() {
+      appendLog("Requesting decommissioning of current active platform banner alerts...");
+      try {
+        const res = await fetch("/api/admin/broadcast/dismiss", {
+          method: "POST"
+        });
+        if (res.ok) {
+          appendLog("Dismissed active broadcast warning telemetry.", "success");
+          document.getElementById("active-fcm-bulletin").classList.add("hidden");
+        }
+      } catch(err) {
+        appendLog(`Error dismissing alert warnings checklist: ${err.message}`, "error");
+      }
+    }
+
+    // --- CHARTING PERFORMANCE ENGINE USING CHART.JS ---
+    let currentMetricValues = {
+      sessions: 0,
+      concurrency: 0,
+      conversions: 0
+    };
+
+    // Incremental count-up animation function with dynamic color pulsing
+    function animateValue(elementId, start, end, duration, decimal = false) {
+      if (start === end) {
+        const el = document.getElementById(elementId);
+        if (el) el.innerText = decimal ? `${end.toFixed(2)}%` : end.toLocaleString();
+        return;
+      }
+      const el = document.getElementById(elementId);
+      if (!el) return;
+      
+      // Add subtle glow flash transition effect
+      el.classList.add("text-emerald-400 font-bold scale-105");
+      setTimeout(() => {
+        el.classList.remove("text-emerald-400", "scale-105");
+      }, 800);
+      
+      const range = end - start;
+      const stepTime = 15;
+      const stepsCount = Math.max(1, Math.min(100, Math.floor(duration / stepTime)));
+      const increment = range / stepsCount;
+      let stepValue = start;
+      let stepIdx = 0;
+      
+      const timer = setInterval(() => {
+        stepIdx++;
+        stepValue += increment;
+        
+        if (stepIdx >= stepsCount) {
+          clearInterval(timer);
+          stepValue = end;
+        }
+        
+        el.innerText = decimal 
+          ? `${stepValue.toFixed(2)}%` 
+          : Math.floor(stepValue).toLocaleString();
+      }, stepTime);
+    }
+
+    // Fetch real-time metrics with counting animation
+    async function fetchRealTimeMetrics() {
+      if (localStorage.getItem("admin_session_token") !== "session_token_adslivetv_2026_xyz") return;
+
+      try {
+        const res = await fetch("/api/admin/metrics");
+        if (res.ok) {
+          const metrics = await res.json();
+          
+          // Animate count-up transition effects
+          animateValue("metric-sessions", currentMetricValues.sessions, metrics.activeSessions, 400, false);
+          animateValue("metric-concurrency", currentMetricValues.concurrency, metrics.streamConcurrency, 400, false);
+          animateValue("metric-conversions", currentMetricValues.conversions, metrics.conversionRate, 400, true);
+          
+          // Cache values
+          currentMetricValues.sessions = metrics.activeSessions;
+          currentMetricValues.concurrency = metrics.streamConcurrency;
+          currentMetricValues.conversions = metrics.conversionRate;
+
+          updateEngagementCharts(metrics);
+        }
+      } catch(err) {
+        console.warn("Could not fetch realtime spectator metrics", err);
+      }
+    }
+
+    // Poll the active connection gateways status (Firebase, Mux, API-Football)
+    async function pollServicesHealth() {
+      if (localStorage.getItem("admin_session_token") !== "session_token_adslivetv_2026_xyz") return;
+      
+      try {
+        const res = await fetch("/api/admin/services-health");
+        if (res.ok) {
+          const data = await res.json();
+          renderServicesHealth(data.services);
+        }
+      } catch (err) {
+        console.warn("Error polling health gateways", err);
+      }
+    }
+
+    function renderServicesHealth(services) {
+      const container = document.getElementById("services-health-list");
+      if (!container) return;
+      container.innerHTML = "";
+      
+      services.forEach(srv => {
+        const srvActive = srv.status === "ONLINE";
+        const reliabilityColor = srvActive 
+          ? (srv.reliability > 95 ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-amber-500") 
+          : "bg-rose-500/20";
+        const badgeStyle = srvActive 
+          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25" 
+          : "bg-rose-500/25 text-rose-400 border border-rose-500/20 animate-pulse";
+          
+        const div = document.createElement("div");
+        div.className = "p-3.5 bg-zinc-950/40 border border-white/5 rounded-xl space-y-2 hover:bg-zinc-900/40 transition-all";
+        div.innerHTML = `
+          <div class="flex items-center justify-between text-xs">
+            <span class="font-bold text-white font-sans">${srv.name}</span>
+            <span class="px-2 py-0.5 rounded text-[9px] font-mono font-bold ${badgeStyle}">${srv.status}</span>
+          </div>
+          
+          <div class="space-y-1">
+            <div class="flex justify-between text-[10px] text-zinc-400 font-mono">
+              <span>Reliability Score:</span>
+              <span class="font-bold text-zinc-350">${srv.reliability}%</span>
+            </div>
+            <!-- Progress Tracker -->
+            <div class="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
+              <div class="h-full ${reliabilityColor} transition-all duration-500" style="width: ${srv.reliability}%"></div>
+            </div>
+          </div>
+          
+          <div class="flex justify-between items-center text-[9px] text-zinc-500 font-mono pt-0.5">
+            <span>Latency: ${srvActive ? `${srv.latency}ms` : 'N/A'}</span>
+            <span class="scale-[0.85] text-zinc-650 block origin-right font-light">${srv.endpoint}</span>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    // Fetch administrative audit logs from express server database
+    let serverAuditLogsRef = [];
+
+    async function fetchAuditLogsAndRender() {
+      if (localStorage.getItem("admin_session_token") !== "session_token_adslivetv_2026_xyz") return;
+      
+      try {
+        const res = await fetch("/api/admin/audit-logs");
+        if (res.ok) {
+          const logs = await res.json();
+          renderAuditLogs(logs);
+        }
+      } catch (err) {
+        console.warn("Could not retrieve audit trail logs list", err);
+      }
+    }
+
+    function renderAuditLogs(logs) {
+      serverAuditLogsRef = logs;
+      
+      // If user is currently typing in search, defer to searches rendering
+      const searchBox = document.getElementById("logs-search");
+      if (searchBox && searchBox.value.trim() !== "") {
+        filterLogsList(searchBox.value.trim());
+        return;
+      }
+
+      const container = document.getElementById("logs-container");
+      if (!container) return;
+      
+      if (logs.length === 0) {
+        container.innerHTML = `<div class="text-zinc-600 text-center py-4 text-[10px]">No security activity logged.</div>`;
+        return;
+      }
+      
+      container.innerHTML = logs.slice(0, 30).map(log => {
+        const isFailed = log.status === "FAILED";
+        const statusClass = isFailed ? "text-rose-400" : "text-emerald-400";
+        
+        let timeStr = "";
+        try {
+          const dt = new Date(log.timestamp);
+          timeStr = dt.toLocaleTimeString();
+        } catch(e) {
+          timeStr = log.timestamp || "SYSTEM";
+        }
+        
+        return `
+          <div class="py-1.5 border-b border-zinc-900 last:border-b-0 space-y-0.5">
+            <div class="flex justify-between items-center text-[9px] text-zinc-500 font-mono">
+              <span>[${timeStr}] • actor: <strong class="text-blue-400 font-bold">${log.actor}</strong></span>
+              <span class="${statusClass} font-mono font-bold select-all">${log.status}</span>
+            </div>
+            <p class="text-[10px] text-zinc-300 leading-relaxed font-sans font-medium select-all font-mono">${log.action}</p>
+          </div>
+        `;
+      }).join('');
+      
+      // Scroll to bottom
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // Filter dynamic audit logs list on action input
+    function filterLogsList(searchTerm) {
+      const container = document.getElementById("logs-container");
+      if (!container) return;
+
+      if (!searchTerm || searchTerm.trim() === "") {
+        renderFilteredAuditLogs(serverAuditLogsRef);
+        return;
+      }
+
+      const query = searchTerm.toLowerCase().trim();
+      const filtered = serverAuditLogsRef.filter(log => {
+        const actor = (log.actor || "").toLowerCase();
+        const action = (log.action || "").toLowerCase();
+        const status = (log.status || "").toLowerCase();
+        return actor.includes(query) || action.includes(query) || status.includes(query);
+      });
+
+      renderFilteredAuditLogs(filtered);
+    }
+
+    function renderFilteredAuditLogs(logs) {
+      const container = document.getElementById("logs-container");
+      if (!container) return;
+
+      if (logs.length === 0) {
+        container.innerHTML = `<div class="text-zinc-500 text-center py-6 text-[10px] font-mono">No actions matched search filter.</div>`;
+        return;
+      }
+
+      container.innerHTML = logs.slice(0, 30).map(log => {
+        const isFailed = log.status === "FAILED";
+        const statusClass = isFailed ? "text-rose-400" : "text-emerald-400";
+        
+        let timeStr = "";
+        try {
+          const dt = new Date(log.timestamp);
+          timeStr = dt.toLocaleTimeString();
+        } catch(e) {
+          timeStr = log.timestamp || "SYSTEM";
+        }
+        
+        return `
+          <div class="py-1.5 border-b border-zinc-900 last:border-b-0 space-y-0.5">
+            <div class="flex justify-between items-center text-[9px] text-zinc-500 font-mono">
+              <span>[${timeStr}] • actor: <strong class="text-blue-400 font-bold">${log.actor}</strong></span>
+              <span class="${statusClass} font-mono font-bold select-all">${log.status}</span>
+            </div>
+            <p class="text-[10px] text-zinc-300 leading-relaxed font-sans font-medium select-all font-mono">${log.action}</p>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Toggle logs container panel body (Collapse/Expand)
+    function toggleLogsCardBody() {
+      const content = document.getElementById("logs-card-content");
+      const btn = document.getElementById("toggle-logs-visibility-btn");
+      if (!content || !btn) return;
+
+      if (content.classList.contains("hidden")) {
+        content.classList.remove("hidden");
+        btn.innerText = "Collapse";
+      } else {
+        content.classList.add("hidden");
+        btn.innerText = "Expand";
+      }
+    }
+
+    // Force trigger system health poll
+    async function triggerImmediateHealthPoll() {
+      const btn = document.getElementById("refresh-health-btn");
+      const pulse = document.getElementById("health-pulse-indicator");
+      
+      if (btn) {
+        btn.disabled = true;
+        btn.innerText = "Polling...";
+        btn.classList.add("opacity-60");
+      }
+      if (pulse) {
+        pulse.classList.add("bg-indigo-500");
+      }
+
+      appendLog("Forcing immediate API validation check with microservices...", "info");
+      await pollServicesHealth();
+      appendLog("System health validation status completed successfully.", "success");
+
+      setTimeout(() => {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = `
+            <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.253 8H18"></path>
+            </svg>
+            <span>Refresh Now</span>
+          `;
+          btn.classList.remove("opacity-60");
+        }
+        if (pulse) {
+          pulse.classList.remove("bg-indigo-500");
+        }
+      }, 700);
+    }
+
+    // Sound effect system using AudioContext Web API
+    let audioAlertsEnabled = localStorage.getItem("admin_audio_enabled") === "true";
+
+    function updateAudioTogglerUI() {
+      const onIcon = document.getElementById("audio-on-icon");
+      const offIcon = document.getElementById("audio-off-icon");
+      const btn = document.getElementById("audio-alert-toggler");
+      
+      if (audioAlertsEnabled) {
+        if (onIcon) onIcon.classList.remove("hidden");
+        if (offIcon) offIcon.classList.add("hidden");
+        if (btn) {
+          btn.classList.add("border-emerald-500/20", "bg-emerald-500/10");
+          btn.title = "Audio Alerts Enabled";
+        }
+      } else {
+        if (onIcon) onIcon.classList.add("hidden");
+        if (offIcon) offIcon.classList.remove("hidden");
+        if (btn) {
+          btn.classList.remove("border-emerald-500/20", "bg-emerald-500/10");
+          btn.title = "Audio Alerts Muted";
+        }
+      }
+    }
+
+    function toggleAudioAlerts() {
+      audioAlertsEnabled = !audioAlertsEnabled;
+      localStorage.setItem("admin_audio_enabled", audioAlertsEnabled ? "true" : "false");
+      updateAudioTogglerUI();
+      if (audioAlertsEnabled) {
+        playSubtleBeep("success");
+      }
+    }
+
+    function playSubtleBeep(type) {
+      if (!audioAlertsEnabled) return;
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        if (type === "alert") {
+          // Play C5 and E5 double buzzer beep for bulletin publication
+          const osc1 = audioCtx.createOscillator();
+          const osc2 = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          
+          osc1.type = "sine";
+          osc1.frequency.setValueAtTime(523.25, audioCtx.currentTime); 
+          osc2.type = "sine";
+          osc2.frequency.setValueAtTime(659.25, audioCtx.currentTime); 
+          
+          gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.45);
+          
+          osc1.connect(gain);
+          osc2.connect(gain);
+          gain.connect(audioCtx.destination);
+          
+          osc1.start();
+          osc2.start();
+          osc1.stop(audioCtx.currentTime + 0.45);
+          osc2.stop(audioCtx.currentTime + 0.45);
+        } else if (type === "score") {
+          // Play stadium whistle style rapid double high beep for goals
+          const playNote = (time, freq) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.frequency.setValueAtTime(987.77, time); // B5 high beep
+            gain.gain.setValueAtTime(0.12, time);
+            gain.gain.exponentialRampToValueAtTime(0.001, time + 0.12);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(time);
+            osc.stop(time + 0.12);
+          };
+          playNote(audioCtx.currentTime, 988);
+          playNote(audioCtx.currentTime + 0.14, 1174); // D6 note rapid whistle
+        } else {
+          // General success action tone
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(440, audioCtx.currentTime); 
+          gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.2);
+        }
+      } catch (err) {
+        console.warn("Web Audio API disabled or suppressed", err);
+      }
+    }
+
+    // CSV User Table database exporter
+    function exportUsersToCSV() {
+      if (!usersList || usersList.length === 0) {
+        alert("Wait until users database is loaded correctly before exporting.");
+        return;
+      }
+      
+      appendLog("Compiling user profiles... Generating CSV file output", "success");
+      
+      // Define CSV columns
+      const headers = ["User ID", "Name", "Email Address", "Role Authority", "Subscription Tier", "Status"];
+      const csvRows = [headers.join(",")];
+      
+      usersList.forEach(u => {
+        const row = [
+          `"${(u.id || '').replace(/"/g, '""')}"`,
+          `"${(u.name || '').replace(/"/g, '""')}"`,
+          `"${(u.email || '').replace(/"/g, '""')}"`,
+          `"${(u.role || '').replace(/"/g, '""')}"`,
+          `"${(u.subscriptionPlan || '').replace(/"/g, '""')}"`,
+          `"${(u.status || '').replace(/"/g, '""')}"`
+        ];
+        csvRows.push(row.join(","));
+      });
+      
+      const csvContent = "\uFEFF" + csvRows.join("\n"); 
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      
+      const downloadAnchor = document.createElement("a");
+      downloadAnchor.setAttribute("href", url);
+      downloadAnchor.setAttribute("download", `adslivetv_subscribers_${Date.now()}.csv`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      
+      appendLog(`Successfully exported ${usersList.length} sub-records to CSV document layout!`, "success");
+    }
+
+    function updateEngagementCharts(metrics) {
+      if (typeof Chart === "undefined") return;
+
+      const isLight = document.documentElement.classList.contains("light-mode");
+      const gridColor = isLight ? "rgba(0, 0, 0, 0.05)" : "rgba(255, 255, 255, 0.05)";
+      const labelColor = isLight ? "#181c24" : "#e4e4e7";
+
+      // 1. Line Chart overlay for Sessions vs Concurrency
+      if (!sessionsConcurrencyChartRef) {
+        const ctx1 = document.getElementById('sessions-concurrency-chart').getContext('2d');
+        sessionsConcurrencyChartRef = new Chart(ctx1, {
+          type: 'line',
+          data: {
+            labels: metrics.timestamps,
+            datasets: [
+              {
+                label: 'Active Spectators',
+                data: metrics.sessionsHistory,
+                borderColor: '#2563eb', // primary-blue
+                backgroundColor: 'rgba(37, 99, 235, 0.08)',
+                borderWidth: 2,
+                pointBackgroundColor: '#2563eb',
+                tension: 0.35,
+                fill: true
+              },
+              {
+                label: 'Concurrent Streams',
+                data: metrics.concurrencyHistory,
+                borderColor: '#10b981', // secondary-green
+                backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                borderWidth: 2,
+                pointBackgroundColor: '#10b981',
+                tension: 0.35,
+                fill: true
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                labels: { color: labelColor, font: { family: 'Inter', size: 10 } }
+              }
+            },
+            scales: {
+              x: {
+                grid: { color: gridColor },
+                ticks: { color: labelColor, font: { family: 'JetBrains Mono', size: 9 } }
+              },
+              y: {
+                grid: { color: gridColor },
+                ticks: { color: labelColor, font: { family: 'JetBrains Mono', size: 9 } }
+              }
+            }
+          }
+        });
+      } else {
+        // Smoothly updates matching parameters to prevent flickering
+        sessionsConcurrencyChartRef.data.labels = metrics.timestamps;
+        sessionsConcurrencyChartRef.data.datasets[0].data = metrics.sessionsHistory;
+        sessionsConcurrencyChartRef.data.datasets[1].data = metrics.concurrencyHistory;
+        sessionsConcurrencyChartRef.options.plugins.legend.labels.color = labelColor;
+        sessionsConcurrencyChartRef.options.scales.x.ticks.color = labelColor;
+        sessionsConcurrencyChartRef.options.scales.x.grid.color = gridColor;
+        sessionsConcurrencyChartRef.options.scales.y.ticks.color = labelColor;
+        sessionsConcurrencyChartRef.options.scales.y.grid.color = gridColor;
+        sessionsConcurrencyChartRef.update('none'); // Animate smoothly without reset
+      }
+
+      // 2. Bar Chart for Paywall Conversion Rate
+      if (!conversionsChartRef) {
+        const ctx2 = document.getElementById('conversions-chart').getContext('2d');
+        conversionsChartRef = new Chart(ctx2, {
+          type: 'bar',
+          data: {
+            labels: metrics.timestamps,
+            datasets: [
+              {
+                label: 'Conversion %',
+                data: metrics.conversionsHistory,
+                backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                borderColor: '#f59e0b',
+                borderWidth: 1.5,
+                borderRadius: 4
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                labels: { color: labelColor, font: { family: 'Inter', size: 10 } }
+              }
+            },
+            scales: {
+              x: {
+                grid: { color: gridColor },
+                ticks: { color: labelColor, font: { family: 'JetBrains Mono', size: 9 } }
+              },
+              y: {
+                grid: { color: gridColor },
+                ticks: { color: labelColor, font: { family: 'JetBrains Mono', size: 9 } }
+              }
+            }
+          }
+        });
+      } else {
+        conversionsChartRef.data.labels = metrics.timestamps;
+        conversionsChartRef.data.datasets[0].data = metrics.conversionsHistory;
+        conversionsChartRef.options.plugins.legend.labels.color = labelColor;
+        conversionsChartRef.options.scales.x.ticks.color = labelColor;
+        conversionsChartRef.options.scales.x.grid.color = gridColor;
+        conversionsChartRef.options.scales.y.ticks.color = labelColor;
+        conversionsChartRef.options.scales.y.grid.color = gridColor;
+        conversionsChartRef.update('none');
+      }
+    }
+
+    function refreshChartStyles() {
+      if (sessionsConcurrencyChartRef && conversionsChartRef) {
+        const isLight = document.documentElement.classList.contains("light-mode");
+        const gridColor = isLight ? "rgba(0, 0, 0, 0.05)" : "rgba(255, 255, 255, 0.05)";
+        const labelColor = isLight ? "#181c24" : "#e4e4e7";
+
+        [sessionsConcurrencyChartRef, conversionsChartRef].forEach(chart => {
+          chart.options.plugins.legend.labels.color = labelColor;
+          chart.options.scales.x.ticks.color = labelColor;
+          chart.options.scales.x.grid.color = gridColor;
+          chart.options.scales.y.ticks.color = labelColor;
+          chart.options.scales.y.grid.color = gridColor;
+          chart.update();
+        });
+      }
+    }
+
+    // Check if admin is currently authenticated with localStorage session tokens
+    function checkAdminSession() {
+      const token = localStorage.getItem("admin_session_token");
+      const loginOverlay = document.getElementById("admin-login-overlay");
+      const dashboardMain = document.getElementById("admin-main-dashboard");
+      
+      if (token === "session_token_adslivetv_2026_xyz") {
+        loginOverlay.classList.add("hidden");
+        dashboardMain.classList.remove("hidden");
+        return true;
+      } else {
+        loginOverlay.classList.remove("hidden");
+        dashboardMain.classList.add("hidden");
+        return false;
+      }
+    }
+
+    // Handle Admin authentication form submit
+    document.getElementById("login-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = document.getElementById("login-email").value;
+      const password = document.getElementById("login-password").value;
+      const errorDiv = document.getElementById("login-error");
+      errorDiv.classList.add("hidden");
+      
+      try {
+        const res = await fetch("/api/admin/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password })
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          localStorage.setItem("admin_session_token", data.token);
+          logsArray.push({ time: "SYSTEM", message: "Admin authenticated successfully.", type: "success" });
+          checkAdminSession();
+          await syncAllPanels();
+        } else {
+          const errData = await res.json();
+          errorDiv.innerText = errData.error || "Invalid administrator credentials.";
+          errorDiv.classList.remove("hidden");
+        }
+      } catch (err) {
+        errorDiv.innerText = "Error: Connection handshake with administrative context failed.";
+        errorDiv.classList.remove("hidden");
+      }
+    });
+
+    // Handle Logout
+    function handleAdminLogout() {
+      localStorage.removeItem("admin_session_token");
+      logsArray.push({ time: "SYSTEM", message: "Manual logout requested. Administrative session torn down.", type: "info" });
+      checkAdminSession();
+    }
+
+    // Polling schedules (runs every 5 seconds)
+    setInterval(fetchRealTimeMetrics, 5000);
+    setInterval(pollServicesHealth, 5000);
+    setInterval(fetchAuditLogsAndRender, 5000);
+
+    // Initial triggers on DOM load
+    window.addEventListener("DOMContentLoaded", () => {
+      updateAudioTogglerUI();
+      const authed = checkAdminSession();
+      if (authed) {
+        syncAllPanels();
+        pollServicesHealth();
+        fetchAuditLogsAndRender();
+      }
+    });
+  </script>
+</body>
+</html>
