@@ -36,7 +36,7 @@ app.use(express.json());
 // IN-MEMORY BACKEND DATA TO MIMIC DATABASE STORAGE
 let serverApiConfig = {
   apiFootballKey: "API_FTB_9876543210_LIVE",
-  sportMonksKey: "SP_MNK_555444333_PROD",
+  sportMonksKey: "BJrDtdrcZMvjP11EUh6K7AMwdj6egCCvmnvxzkfK3ORsFnrAcqS1uyqeTp7L",
   muxKey: "MUX_TOKEN_SECRET_999",
   cloudflareStreamKey: "CF_STRM_KEY_666",
   newsApiKey: "NEWS_API_SEC_112233",
