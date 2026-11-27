@@ -42,7 +42,7 @@ let serverApiConfig = {
   newsApiKey: "NEWS_API_SEC_112233",
   googleAnalyticsId: "G-ADSLIVE99",
   firebaseKey: "FB_WEB_CONFIG_2026_SEC",
-  espnApiKey: "ESPN_WEB_GATEWAY_INTEGRATED_2026"
+  espnApiKey: "site.api.espn.com"
 };
 
 // AUDIT LOGGING DATA STRUCTURE FOR BACKEND ADMINISTRATION ACTIONS
