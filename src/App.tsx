@@ -171,10 +171,20 @@ export default function App() {
   const [apiFeatures, setApiFeatures] = useState<any[]>([]);
   const [apiLoading, setApiLoading] = useState<boolean>(false);
   const selectedApiFeedRef = useRef(selectedApiFeed);
+  const activeMatchRef = useRef<Match | null>(activeMatch);
+  const subscribedMatchIdsRef = useRef<string[]>(subscribedMatchIds);
 
   useEffect(() => {
     selectedApiFeedRef.current = selectedApiFeed;
   }, [selectedApiFeed]);
+
+  useEffect(() => {
+    activeMatchRef.current = activeMatch;
+  }, [activeMatch]);
+
+  useEffect(() => {
+    subscribedMatchIdsRef.current = subscribedMatchIds;
+  }, [subscribedMatchIds]);
 
   // Web Audio Synthesizer Beep for Bell click
   const playSubtleBeep = () => {
@@ -313,17 +323,21 @@ export default function App() {
         setTimeout(() => setSuccessToast(null), 5000);
       }
 
-      // 1. Fetch User
-      const userRes = await fetch("/api/user");
-      if (userRes.ok) {
-        const u = await userRes.json();
-        setCurrentUser(u);
+      const [userRes, trRes, wcGroupsRes, wcBracketRes, newsRes, affiliatesRes] = await Promise.allSettled([
+        fetch("/api/user"),
+        fetch("/api/streams/transponders"),
+        fetch("/api/worldcup/groups"),
+        fetch("/api/worldcup/bracket"),
+        fetch("/api/news"),
+        fetch("/api/affiliates")
+      ]);
+
+      if (userRes.status === "fulfilled" && userRes.value.ok) {
+        setCurrentUser(await userRes.value.json());
       }
 
-      // 2. Fetch Transponders
-      const trRes = await fetch("/api/streams/transponders");
-      if (trRes.ok) {
-        const trData = await trRes.json();
+      if (trRes.status === "fulfilled" && trRes.value.ok) {
+        const trData = await trRes.value.json();
         const list = trData.transponders || [];
         setTransponders(list);
         if (list.length > 0) {
@@ -331,91 +345,81 @@ export default function App() {
         }
       }
 
-      // 3. Fetch SleepMood & Referral Stats
-      await fetchSleepMoodAndReferrals();
-
-      // 4. Fetch Matches
-      await refreshMatches();
-
-      // 5. Fetch World Cup Data
-      const wcGroupsRes = await fetch("/api/worldcup/groups");
-      if (wcGroupsRes.ok) {
-        const data = await wcGroupsRes.json();
-        setWorldCupGroups(data);
+      if (wcGroupsRes.status === "fulfilled" && wcGroupsRes.value.ok) {
+        setWorldCupGroups(await wcGroupsRes.value.json());
       }
 
-      const wcBracketRes = await fetch("/api/worldcup/bracket");
-      if (wcBracketRes.ok) {
-        const data = await wcBracketRes.json();
-        setWorldCupBracket(data);
+      if (wcBracketRes.status === "fulfilled" && wcBracketRes.value.ok) {
+        setWorldCupBracket(await wcBracketRes.value.json());
       }
 
-      // 6. Fetch News
-      const newsRes = await fetch("/api/news");
-      if (newsRes.ok) {
-        const data = await newsRes.json();
+      if (newsRes.status === "fulfilled" && newsRes.value.ok) {
+        const data = await newsRes.value.json();
         setNews(data);
         if (data.length > 0) {
           setSelectedNews(data[0]);
         }
       }
 
-      // 7. Fetch Affiliates
-      const affiliatesRes = await fetch("/api/affiliates");
-      if (affiliatesRes.ok) {
-        const data = await affiliatesRes.json();
-        setAffiliates(data);
+      if (affiliatesRes.status === "fulfilled" && affiliatesRes.value.ok) {
+        setAffiliates(await affiliatesRes.value.json());
       }
 
-      // 8. Fetch Admin masked settings
-      fetchAdminConfig();
-
+      await Promise.allSettled([
+        fetchSleepMoodAndReferrals(),
+        refreshMatches(),
+        fetchAdminConfig()
+      ]);
     } catch (err) {
-      console.error("Error fetching initial files:", err);
+      console.warn("Initial data sync warning:", err);
     }
   };
 
   const refreshMatches = async () => {
     try {
-      // 1. Fetch active global push alerts
-      const activeAlertRes = await fetch("/api/broadcast/active");
-      if (activeAlertRes.ok) {
-        const alertData = await activeAlertRes.json();
+      const matchesUrl = selectedApiFeedRef.current === "local"
+        ? "/api/matches"
+        : `/api/external/matches?provider=${selectedApiFeedRef.current}`;
+
+      const [alertRes, userRes, smRes, matchesRes] = await Promise.allSettled([
+        fetch("/api/broadcast/active"),
+        fetch("/api/user"),
+        fetch("/api/sleepmood/status"),
+        fetch(matchesUrl)
+      ]);
+
+      if (alertRes.status === "fulfilled" && alertRes.value.ok) {
+        const alertData = await alertRes.value.json();
         setActiveBroadcast(alertData.alert || null);
       }
 
-      // 2. Sync profile & SleepMood attributes in real time
-      const userRes = await fetch("/api/user");
-      if (userRes.ok) {
-        const u = await userRes.json();
+      if (userRes.status === "fulfilled" && userRes.value.ok) {
+        const u = await userRes.value.json();
         setCurrentUser(u);
       }
-      const smRes = await fetch("/api/sleepmood/status");
-      if (smRes.ok) {
-        setSleepMood(await smRes.json());
+
+      if (smRes.status === "fulfilled" && smRes.value.ok) {
+        setSleepMood(await smRes.value.json());
       }
 
-      // 3. Fetch matches live scoring updates
-      const matchesUrl = selectedApiFeedRef.current === "local" 
-        ? "/api/matches" 
-        : `/api/external/matches?provider=${selectedApiFeedRef.current}`;
-      const matchesRes = await fetch(matchesUrl);
-      if (matchesRes.ok) {
-        const data = await matchesRes.json();
-        
+      if (matchesRes.status === "fulfilled" && matchesRes.value.ok) {
+        const data = await matchesRes.value.json();
+        if (!Array.isArray(data)) return;
+
         // Real-time score change checking for subscribed matches
         const prevData = previousMatchesRef.current;
-        if (prevData && prevData.length > 0) {
+        const activeSubs = subscribedMatchIdsRef.current;
+        if (prevData && prevData.length > 0 && activeSubs.length > 0) {
           data.forEach((newM: Match) => {
             const oldM = prevData.find(om => om.id === newM.id);
-            if (oldM && subscribedMatchIds.includes(newM.id)) {
+            if (oldM && activeSubs.includes(newM.id)) {
               const homeScoreChanged = newM.homeScore > oldM.homeScore;
               const awayScoreChanged = newM.awayScore > oldM.awayScore;
               if (homeScoreChanged || awayScoreChanged) {
-                const scorerName = homeScoreChanged 
-                  ? (newM.events[0]?.player || `${newM.homeTeam} Player`) 
-                  : (newM.events[0]?.player || `${newM.awayTeam} Player`);
-                
+                const scorerName = homeScoreChanged
+                  ? (newM.events?.[0]?.player || `${newM.homeTeam} Player`)
+                  : (newM.events?.[0]?.player || `${newM.awayTeam} Player`);
+
                 setGoalAlert({
                   matchId: newM.id,
                   title: `⚽ GOAL FOR ${homeScoreChanged ? newM.homeTeam.toUpperCase() : newM.awayTeam.toUpperCase()}!`,
@@ -431,29 +435,26 @@ export default function App() {
             }
           });
         }
+
         previousMatchesRef.current = data;
         setMatches(data);
-        
+
         // Auto select active match if none or update existing selected match state
         if (data.length > 0) {
-          setMatches((prevMatches: Match[]) => {
-            if (activeMatch) {
-              const updated = data.find((m: Match) => m.id === activeMatch.id);
-              if (updated) {
-                // Smooth state sync
-                setActiveMatch(updated);
-              }
-            } else {
-              // Default to live match
-              const firstLive = data.find((m: Match) => m.status === MatchStatus.LIVE);
-              setActiveMatch(firstLive || data[0]);
+          const currentActive = activeMatchRef.current;
+          if (currentActive) {
+            const updated = data.find((m: Match) => m.id === currentActive.id);
+            if (updated) {
+              setActiveMatch(updated);
             }
-            return data;
-          });
+          } else {
+            const firstLive = data.find((m: Match) => m.status === MatchStatus.LIVE);
+            setActiveMatch(firstLive || data[0]);
+          }
         }
       }
     } catch (e) {
-      console.error("Error updates:", e);
+      console.warn("Background refresh skipped:", e);
     }
   };
 
