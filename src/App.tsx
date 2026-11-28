@@ -31,7 +31,10 @@ import {
   Trash2, 
   Check, 
   Lock, 
-  Gift 
+  Gift,
+  Moon,
+  Copy,
+  VolumeX
 } from "lucide-react";
 
 import { 
@@ -43,8 +46,12 @@ import {
   User as UserType, 
   ApiConfiguration, 
   BettingAffiliate, 
-  ChatMessage 
+  ChatMessage,
+  SleepMoodStatus,
+  ReferralStats,
+  StreamTransponder
 } from "./types";
+import { HlsVideoPlayer } from "./components/HlsVideoPlayer";
 
 export default function App() {
   // STATE MANAGEMENT
@@ -117,8 +124,22 @@ export default function App() {
   const [checkoutPlan, setCheckoutPlan] = useState<"Premium" | "VIP" | null>(null);
   const [couponCode, setCouponCode] = useState("");
   const [couponResult, setCouponResult] = useState<string | null>(null);
+  const [validatedCouponDiscount, setValidatedCouponDiscount] = useState<number>(0);
+  const [paymentMethod, setPaymentMethod] = useState<"stripe" | "paypal" | "crypto">("stripe");
   const [creditCardNumber, setCreditCardNumber] = useState("4242 4242 4242 4242");
   const [checkoutProcessing, setCheckoutProcessing] = useState(false);
+
+  // SleepMood, Referrals & HLS Transponders State
+  const [sleepMood, setSleepMood] = useState<SleepMoodStatus | null>(null);
+  const [referralStats, setReferralStats] = useState<ReferralStats | null>(null);
+  const [referralModalOpen, setReferralModalOpen] = useState(false);
+  const [transponders, setTransponders] = useState<StreamTransponder[]>([]);
+  const [activeTransponder, setActiveTransponder] = useState<StreamTransponder | null>(null);
+  const [trailerSoundtrackOn, setTrailerSoundtrackOn] = useState<boolean>(true);
+  const [refFriendName, setRefFriendName] = useState("");
+  const [refFriendPlan, setRefFriendPlan] = useState<"Free" | "Premium" | "VIP">("Free");
+  const [referralClaiming, setReferralClaiming] = useState(false);
+  const [copiedRefLink, setCopiedRefLink] = useState(false);
 
   // Auth Modal/Sim states
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -244,8 +265,54 @@ export default function App() {
     return () => clearInterval(spectatorInt);
   }, []);
 
+  const fetchSleepMoodAndReferrals = async () => {
+    try {
+      const [smRes, refRes] = await Promise.all([
+        fetch("/api/sleepmood/status"),
+        fetch("/api/referrals/my-stats")
+      ]);
+      if (smRes.ok) {
+        setSleepMood(await smRes.json());
+      }
+      if (refRes.ok) {
+        setReferralStats(await refRes.json());
+      }
+    } catch (err) {
+      console.warn("Failed to sync SleepMood/Referrals:", err);
+    }
+  };
+
+  const trackStreamView = async () => {
+    try {
+      const res = await fetch("/api/sleepmood/track-view", { method: "POST" });
+      if (res.ok) {
+        setSleepMood(await res.json());
+      }
+    } catch (err) {
+      console.warn("Failed to track stream view:", err);
+    }
+  };
+
   const fetchInitialData = async () => {
     try {
+      // Check ?ref= referral link arrival
+      const params = new URLSearchParams(window.location.search);
+      const refParam = params.get("ref");
+      if (refParam) {
+        fetch("/api/referrals/claim", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            friendName: "Invited Fan",
+            upgradedPlan: "Free",
+            referrerId: refParam
+          })
+        }).catch(() => {});
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setSuccessToast(`🎁 Welcome via referral invite (${refParam})! Sign-up credit applied.`);
+        setTimeout(() => setSuccessToast(null), 5000);
+      }
+
       // 1. Fetch User
       const userRes = await fetch("/api/user");
       if (userRes.ok) {
@@ -253,10 +320,24 @@ export default function App() {
         setCurrentUser(u);
       }
 
-      // 2. Fetch Matches
+      // 2. Fetch Transponders
+      const trRes = await fetch("/api/streams/transponders");
+      if (trRes.ok) {
+        const trData = await trRes.json();
+        const list = trData.transponders || [];
+        setTransponders(list);
+        if (list.length > 0) {
+          setActiveTransponder(list[0]);
+        }
+      }
+
+      // 3. Fetch SleepMood & Referral Stats
+      await fetchSleepMoodAndReferrals();
+
+      // 4. Fetch Matches
       await refreshMatches();
 
-      // 3. Fetch World Cup Data
+      // 5. Fetch World Cup Data
       const wcGroupsRes = await fetch("/api/worldcup/groups");
       if (wcGroupsRes.ok) {
         const data = await wcGroupsRes.json();
@@ -269,7 +350,7 @@ export default function App() {
         setWorldCupBracket(data);
       }
 
-      // 4. Fetch News
+      // 6. Fetch News
       const newsRes = await fetch("/api/news");
       if (newsRes.ok) {
         const data = await newsRes.json();
@@ -279,14 +360,14 @@ export default function App() {
         }
       }
 
-      // 5. Fetch Affiliates
+      // 7. Fetch Affiliates
       const affiliatesRes = await fetch("/api/affiliates");
       if (affiliatesRes.ok) {
         const data = await affiliatesRes.json();
         setAffiliates(data);
       }
 
-      // 6. Fetch Admin masked settings
+      // 8. Fetch Admin masked settings
       fetchAdminConfig();
 
     } catch (err) {
@@ -303,11 +384,15 @@ export default function App() {
         setActiveBroadcast(alertData.alert || null);
       }
 
-      // 2. Sync profile attributes in real time in case admin modified subscription or privileges
+      // 2. Sync profile & SleepMood attributes in real time
       const userRes = await fetch("/api/user");
       if (userRes.ok) {
         const u = await userRes.json();
         setCurrentUser(u);
+      }
+      const smRes = await fetch("/api/sleepmood/status");
+      if (smRes.ok) {
+        setSleepMood(await smRes.json());
       }
 
       // 3. Fetch matches live scoring updates
@@ -434,7 +519,7 @@ export default function App() {
   const fetchSoccerSchedules = async (searchQuery?: string) => {
     setSchedulesLoading(true);
     try {
-      const res = await fetch("/api/gemini/soccer-schedules", {
+      const res = await fetch("/api/ai/schedules-grounded", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: searchQuery || "" })
@@ -455,16 +540,12 @@ export default function App() {
   };
 
   const handleGenerateTrailer = async (matchId: string) => {
-    if (currentUser.subscriptionPlan === "Free") {
-      setSuccessToast("🔒 Match Trailer Previews are reserved for Premium/VIP accounts. Upgrade now to experience cinematic summaries!");
-      setTimeout(() => setSuccessToast(null), 5000);
-      setActiveTab("vip");
-      return;
-    }
     setTrailerLoading(true);
     try {
-      const res = await fetch(`/api/matches/${matchId}/trailer`, {
-        method: "POST"
+      const res = await fetch("/api/ai/generate-trailer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matchId })
       });
       if (res.ok) {
         const data = await res.json();
@@ -472,12 +553,15 @@ export default function App() {
         setIsTrailerPlaying(true);
         setCurrentTrailerSceneIdx(0);
         setIsPlayoutActive(true);
+        if (trailerSoundtrackOn) playSubtleBeep();
       } else {
-        alert("Failed to connect with AI video generation tools!");
+        setSuccessToast("Failed to connect with AI cinematic trailer generator.");
+        setTimeout(() => setSuccessToast(null), 4000);
       }
     } catch (err) {
       console.error(err);
-      alert("Error generating video trailer!");
+      setSuccessToast("Error generating AI cinematic trailer.");
+      setTimeout(() => setSuccessToast(null), 4000);
     } finally {
       setTrailerLoading(false);
     }
@@ -490,18 +574,17 @@ export default function App() {
       interval = setInterval(() => {
         setCurrentTrailerSceneIdx(prev => {
           if (prev < activeTrailer.scenes.length - 1) {
-            // Play a pleasant alert tone when scene shifts
-            playSubtleBeep();
+            if (trailerSoundtrackOn) playSubtleBeep();
             return prev + 1;
           } else {
             setIsTrailerPlaying(false);
             return 0;
           }
         });
-      }, 6000); // 6 seconds per beautiful cinematic scene slide
+      }, 6000);
     }
     return () => clearInterval(interval);
-  }, [isTrailerPlaying, activeTrailer]);
+  }, [isTrailerPlaying, activeTrailer, trailerSoundtrackOn]);
 
   const handleSelectMatch = (match: Match) => {
     setActiveMatch(match);
@@ -510,6 +593,16 @@ export default function App() {
     setActiveTrailer(null);
     setCurrentTrailerSceneIdx(0);
     setIsPlayoutActive(true);
+    if (match.status === MatchStatus.LIVE) {
+      trackStreamView();
+    }
+  };
+
+  const handleSelectTransponder = (t: StreamTransponder) => {
+    setActiveTransponder(t);
+    trackStreamView();
+    setSuccessToast(`📡 Switched feed to ${t.name} (${t.quality})`);
+    setTimeout(() => setSuccessToast(null), 3000);
   };
 
   const fetchPoll = async (matchId: string) => {
@@ -540,7 +633,8 @@ export default function App() {
         }));
       } else {
         const err = await res.json();
-        alert(err.error || "Failed to vote!");
+        setSuccessToast(err.error || "Failed to vote!");
+        setTimeout(() => setSuccessToast(null), 4000);
       }
     } catch (err) {
       console.error(err);
@@ -686,7 +780,8 @@ export default function App() {
       });
       if (res.ok) {
         await fetchAdminConfig();
-        alert("API Configuration panel synchronized successfully!");
+        setSuccessToast("API Configuration synchronized successfully.");
+        setTimeout(() => setSuccessToast(null), 4000);
       }
     } catch (err) {
       console.error(err);
@@ -794,6 +889,9 @@ export default function App() {
         const data = await res.json();
         setCurrentUser(data.user);
         setAuthModalOpen(false);
+        await fetchSleepMoodAndReferrals();
+        setSuccessToast(`Signed in as ${data.user.name} (${data.user.subscriptionPlan} Tier)`);
+        setTimeout(() => setSuccessToast(null), 4000);
       }
     } catch (e) {
       console.error(e);
@@ -807,54 +905,123 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setCurrentUser(data.user);
-        alert("Logged out successfully.");
+        await fetchSleepMoodAndReferrals();
+        setSuccessToast("Logged out to Guest Free viewer mode.");
+        setTimeout(() => setSuccessToast(null), 4000);
       }
     } catch (err) {
       console.error(err);
     }
   };
 
-  // SUBSCRIPTION PAYMENT
+  // SUBSCRIPTION PAYMENT & COUPON VALIDATION
   const triggerCheckout = (planName: "Premium" | "VIP") => {
     setCheckoutPlan(planName);
     setCheckoutModalOpen(true);
     setCouponCode("");
     setCouponResult(null);
+    setValidatedCouponDiscount(0);
+    setPaymentMethod("stripe");
   };
 
-  const handleApplyCoupon = () => {
-    if (couponCode.toUpperCase() === "ADSRULE") {
-      setCouponResult("VALID: 20% Promo Applied! Check discounted total below.");
-    } else {
-      setCouponResult("INVALID COUPON: Choose 'ADSRULE' for structural testing discount.");
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) return;
+    try {
+      const res = await fetch("/api/coupons/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: couponCode })
+      });
+      const data = await res.json();
+      setCouponResult(data.message);
+      setValidatedCouponDiscount(data.valid ? data.discountPercent : 0);
+    } catch {
+      setCouponResult("Unable to verify coupon right now.");
+      setValidatedCouponDiscount(0);
     }
   };
 
   const handleProcessCheckout = async () => {
     if (!checkoutPlan) return;
     setCheckoutProcessing(true);
-    setTimeout(async () => {
-      try {
-        const res = await fetch("/api/user/subscribe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            plan: checkoutPlan,
-            coupon: couponCode.toUpperCase() === "ADSRULE" ? "ADSRULE" : ""
-          })
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setCurrentUser(data.user);
-          alert(`Success! You have officially upgraded to a VIP/Premium tier level. Price Paid: $${data.pricePaid.toFixed(2)}.`);
-          setCheckoutModalOpen(false);
-        }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setCheckoutProcessing(false);
+    try {
+      const res = await fetch("/api/payments/create-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          plan: checkoutPlan,
+          paymentMethod,
+          couponCode: validatedCouponDiscount > 0 ? couponCode : ""
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentUser(data.user);
+        if (data.sleepMood) setSleepMood(data.sleepMood);
+        setCheckoutModalOpen(false);
+        setSuccessToast(
+          `✅ Upgraded to ${data.plan} via ${String(data.provider).toUpperCase()}! Paid $${Number(data.finalPrice).toFixed(2)}${data.appliedCoupon ? ` (Code: ${data.appliedCoupon})` : ""}.`
+        );
+        setTimeout(() => setSuccessToast(null), 5000);
       }
-    }, 1500);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setCheckoutProcessing(false);
+    }
+  };
+
+  const handleClaimReferral = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!refFriendName.trim()) return;
+    setReferralClaiming(true);
+    try {
+      const res = await fetch("/api/referrals/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          friendName: refFriendName.trim(),
+          upgradedPlan: refFriendPlan
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setReferralStats((prev) =>
+          prev
+            ? {
+                ...prev,
+                referralsCount: data.referralsCount,
+                requiredCount: data.requiredCount,
+                points: data.points,
+                rankBadge: data.rankBadge,
+                bonusVipDays: data.bonusVipDays,
+                unlockedFreeAccess: data.unlockedFreeAccess,
+                rewardCoupons: data.rewardCoupons,
+                referredUsers: data.referredUsers
+              }
+            : null
+        );
+        if (data.sleepMood) setSleepMood(data.sleepMood);
+        setRefFriendName("");
+        setSuccessToast(
+          data.unlockedFreeAccess
+            ? "🎉 Referral goal met! SleepMood unlocked for free streaming!"
+            : `🎁 Referral credited! (${data.referralsCount}/${data.requiredCount} completed)`
+        );
+        setTimeout(() => setSuccessToast(null), 5000);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setReferralClaiming(false);
+    }
+  };
+
+  const handleCopyReferralLink = () => {
+    if (!referralStats?.referralLink) return;
+    navigator.clipboard?.writeText(referralStats.referralLink).catch(() => {});
+    setCopiedRefLink(true);
+    setTimeout(() => setCopiedRefLink(false), 2500);
   };
 
   return (
@@ -914,7 +1081,7 @@ export default function App() {
             onClick={() => { setActiveTab("stream"); refreshMatches(); }}
             className={`px-4 py-2 rounded-lg transition-all ${activeTab === "stream" ? "bg-white/10 text-white font-semibold" : "text-zinc-400 hover:text-white hover:bg-white/5"}`}
           >
-            📺 Live Broadcast
+            📺 Matches
           </button>
           <button 
             id="nav-tab-scores"
@@ -960,8 +1127,32 @@ export default function App() {
           </button>
         </nav>
 
-        {/* PROFILE STATE */}
-        <div className="flex items-center gap-3">
+        {/* PROFILE & SLEEPMOOD STATE */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            id="btn-sleepmood-pill"
+            type="button"
+            onClick={() => {
+              fetchSleepMoodAndReferrals();
+              setReferralModalOpen(true);
+            }}
+            className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] font-mono font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+              sleepMood?.locked
+                ? "bg-amber-500/15 border-amber-500/40 text-amber-300 animate-pulse"
+                : "bg-white/5 border-white/10 text-zinc-300 hover:text-white hover:bg-white/10"
+            }`}
+            title="Open SleepMood & Referral Unlock Center"
+          >
+            <Moon className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden md:inline">
+              {sleepMood?.locked
+                ? "SleepMood Locked"
+                : currentUser.subscriptionPlan === "Free"
+                ? `Free: ${sleepMood?.viewsUsed ?? 0}/${sleepMood?.viewsLimit ?? 2}`
+                : "Referrals & Rewards"}
+            </span>
+          </button>
+
           {currentUser.role !== "Guest" ? (
             <div className="flex items-center gap-2">
               <div className="hidden sm:block text-right">
@@ -996,7 +1187,7 @@ export default function App() {
 
       {/* MOBILE SCROLLABLE TAB NAVIGATION */}
       <div className="lg:hidden flex overflow-x-auto gap-1.5 p-2 bg-brand-dark/50 border-b border-white/5 text-xs text-nowrap scrollbar-none">
-        <button id="mob-tab-stream" onClick={() => setActiveTab("stream")} className={`px-3 py-1.5 rounded-md ${activeTab === "stream" ? "bg-white/15 text-white" : "text-zinc-400"}`}>📺 Live Broadcast</button>
+        <button id="mob-tab-stream" onClick={() => setActiveTab("stream")} className={`px-3 py-1.5 rounded-md ${activeTab === "stream" ? "bg-white/15 text-white" : "text-zinc-400"}`}>📺 Matches</button>
         <button id="mob-tab-scores" onClick={() => setActiveTab("scores")} className={`px-3 py-1.5 rounded-md ${activeTab === "scores" ? "bg-white/15 text-white" : "text-zinc-400"}`}>📋 Scores</button>
         <button id="mob-tab-wc" onClick={() => setActiveTab("wc")} className={`px-3 py-1.5 rounded-md ${activeTab === "wc" ? "bg-white/15 text-white" : "text-zinc-400"}`}>🏆 World Cup</button>
         <button id="mob-tab-news" onClick={() => setActiveTab("news")} className={`px-3 py-1.5 rounded-md ${activeTab === "news" ? "bg-white/15 text-white" : "text-zinc-400"}`}>🗞️ News</button>
@@ -1046,10 +1237,20 @@ export default function App() {
                         {activeMatch.league}
                       </p>
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-zinc-400">
+                    <div className="flex items-center gap-2 sm:gap-3 text-xs text-zinc-400">
                       <span className="hidden sm:inline">🎙️ Audio: <b className="text-white">{streamAudioLang}</b></span>
                       <span>👥 Specs: <b className="text-white">{viewerCount.toLocaleString()}</b></span>
-                      <span className="text-white/50">|</span>
+                      <button
+                        id="btn-header-trailer"
+                        type="button"
+                        disabled={trailerLoading}
+                        onClick={() => handleGenerateTrailer(activeMatch.id)}
+                        className="text-[10px] font-mono font-bold px-2.5 py-1 rounded bg-indigo-600/25 hover:bg-indigo-600/45 text-indigo-300 border border-indigo-500/40 transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                        title="Generate 3-Scene AI Cinematic Match Trailer"
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        <span>{trailerLoading ? "Generating..." : "AI Trailer"}</span>
+                      </button>
                       <button 
                         id="toggle-pip-mode"
                         onClick={() => {
@@ -1065,7 +1266,7 @@ export default function App() {
                   </div>
 
                   {/* VISUAL STREAM PREVIEW CANVAS CONTAINER */}
-                  <div className="aspect-video bg-black relative flex flex-col items-center justify-center overflow-hidden">
+                  <div className="bg-black relative flex flex-col overflow-hidden">
                     
                     {/* Floating Reaction Emojis HUD Display */}
                     <div className="absolute inset-0 pointer-events-none z-20">
@@ -1088,31 +1289,60 @@ export default function App() {
 
                     {/* DYNAMIC PLAYER CONTAINER */}
                     {isTrailerPlaying && activeTrailer ? (
-                      <div className="w-full h-full relative flex flex-col justify-between p-6 bg-cover bg-center transition-all duration-700" style={{ backgroundImage: `linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)), url(${activeTrailer.scenes[currentTrailerSceneIdx]?.image})` }}>
+                      <div className="aspect-video w-full relative flex flex-col justify-between p-5 sm:p-6 bg-cover bg-center transition-all duration-700" style={{ backgroundImage: `linear-gradient(rgba(0,0,0,0.82), rgba(0,0,0,0.88)), url(${activeTrailer.scenes[currentTrailerSceneIdx]?.image})` }}>
                         
                         {/* Trailer Header HUD */}
-                        <div className="flex justify-between items-center z-10 select-none pb-2 border-b border-white/5">
-                          <div className="flex items-center gap-1.5 font-mono text-[11px]">
+                        <div className="flex flex-wrap justify-between items-center gap-2 z-10 select-none pb-2 border-b border-white/10">
+                          <div className="flex items-center gap-2 font-mono text-[11px]">
                             <span className="bg-rose-500 text-white text-[9px] px-2 py-0.5 rounded font-bold uppercase tracking-widest animate-pulse flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 bg-white rounded-full"></span> PLAYING TRAILER
+                              <span className="w-1.5 h-1.5 bg-white rounded-full"></span> AI CINEMATIC TRAILER
                             </span>
-                            <span className="text-zinc-500">|</span>
-                            <span className="text-indigo-400 font-bold">{activeTrailer.title}</span>
+                            {activeTrailer.scenes[currentTrailerSceneIdx]?.stage && (
+                              <span className="bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 text-[9px] px-2 py-0.5 rounded font-bold uppercase">
+                                {activeTrailer.scenes[currentTrailerSceneIdx].stage}
+                              </span>
+                            )}
+                            <span className="text-indigo-300 font-bold hidden sm:inline">{activeTrailer.title}</span>
                           </div>
-                          <span className="text-[10px] text-zinc-400 font-mono">🔊 Soundtrack: {activeTrailer.music}</span>
+                          <button
+                            type="button"
+                            onClick={() => setTrailerSoundtrackOn(prev => !prev)}
+                            className="text-[10px] font-mono px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-zinc-200 flex items-center gap-1.5 cursor-pointer"
+                          >
+                            {trailerSoundtrackOn ? <Volume2 className="w-3.5 h-3.5 text-emerald-400" /> : <VolumeX className="w-3.5 h-3.5 text-rose-400" />}
+                            <span>{trailerSoundtrackOn ? `Soundtrack: ${activeTrailer.music}` : "Soundtrack Paused"}</span>
+                          </button>
                         </div>
                         
                         {/* Central Scene Illustration */}
-                        <div className="flex-1 flex flex-col items-center justify-center p-4 max-w-xl mx-auto text-center space-y-3 z-10">
-                          <span className="text-indigo-400 text-xs font-mono tracking-widest uppercase">Scene {currentTrailerSceneIdx + 1} of {activeTrailer.scenes.length}</span>
-                          <h3 className="text-lg sm:text-2xl font-black font-display text-white tracking-wide uppercase leading-tight">{activeTrailer.scenes[currentTrailerSceneIdx]?.title}</h3>
-                          <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed italic font-sans select-none">
-                            "{activeTrailer.scenes[currentTrailerSceneIdx]?.description}"
+                        <div className="flex-1 flex flex-col items-center justify-center p-3 max-w-2xl mx-auto text-center space-y-2.5 z-10">
+                          <span className="text-indigo-400 text-xs font-mono tracking-widest uppercase">
+                            Scene {currentTrailerSceneIdx + 1} of {activeTrailer.scenes.length}
+                          </span>
+                          <h3 className="text-lg sm:text-2xl font-black font-display text-white tracking-wide uppercase leading-tight">
+                            {activeTrailer.scenes[currentTrailerSceneIdx]?.title}
+                          </h3>
+                          <p className="text-xs sm:text-sm text-zinc-200 leading-relaxed italic font-sans select-none">
+                            "{activeTrailer.scenes[currentTrailerSceneIdx]?.voiceoverScript || activeTrailer.scenes[currentTrailerSceneIdx]?.description}"
                           </p>
+                          {(activeTrailer.scenes[currentTrailerSceneIdx]?.cameraMove || activeTrailer.scenes[currentTrailerSceneIdx]?.audioCue) && (
+                            <div className="flex flex-wrap justify-center gap-2 pt-1 text-[10px] font-mono">
+                              {activeTrailer.scenes[currentTrailerSceneIdx]?.cameraMove && (
+                                <span className="bg-black/60 border border-white/10 px-2.5 py-1 rounded-lg text-sky-300">
+                                  🎥 {activeTrailer.scenes[currentTrailerSceneIdx].cameraMove}
+                                </span>
+                              )}
+                              {activeTrailer.scenes[currentTrailerSceneIdx]?.audioCue && (
+                                <span className="bg-black/60 border border-white/10 px-2.5 py-1 rounded-lg text-amber-300">
+                                  🎵 {activeTrailer.scenes[currentTrailerSceneIdx].audioCue}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                         
                         {/* Controls bar */}
-                        <div className="bg-black/60 border border-white/10 rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 z-10 text-xs">
+                        <div className="bg-black/70 border border-white/10 rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 z-10 text-xs">
                           <div className="flex items-center gap-3">
                             <button 
                               onClick={() => {
@@ -1121,29 +1351,30 @@ export default function App() {
                               }}
                               className="bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded-lg text-[10px] font-bold text-white transition-all cursor-pointer"
                             >
-                              Stop Preview 🎬
+                              Return to Live Player 📺
                             </button>
-                            <div className="flex items-center gap-1">
-                              {activeTrailer.scenes.map((_: any, idx: number) => (
+                            <div className="flex items-center gap-1.5">
+                              {activeTrailer.scenes.map((sc: any, idx: number) => (
                                 <button 
                                   key={idx}
                                   onClick={() => {
                                     setCurrentTrailerSceneIdx(idx);
-                                    playSubtleBeep();
+                                    if (trailerSoundtrackOn) playSubtleBeep();
                                   }}
-                                  className={`h-2 rounded-full transition-all ${idx === currentTrailerSceneIdx ? "w-6 bg-indigo-500" : "w-2 bg-white/20 hover:bg-white/40"}`}
+                                  title={sc.stage || `Scene ${idx + 1}`}
+                                  className={`h-2 rounded-full transition-all cursor-pointer ${idx === currentTrailerSceneIdx ? "w-7 bg-indigo-500" : "w-2 bg-white/25 hover:bg-white/50"}`}
                                 ></button>
                               ))}
                             </div>
                           </div>
-                          <div className="font-mono text-[10px] text-zinc-500">
-                            Pre-Match Cinematic Analyzer v3.3
+                          <div className="font-mono text-[10px] text-zinc-400">
+                            Gemini Cinematic Match Engine
                           </div>
                         </div>
                       </div>
                     ) : activeMatch.status === MatchStatus.UPCOMING ? (
                       // UPCOMING FIXTURES PRE-GAME INTERACTIVE PANEL
-                      <div className="w-full h-full relative flex flex-col items-center justify-center p-6 bg-cover bg-center" style={{ backgroundImage: `linear-gradient(rgba(0,0,0,0.9), rgba(0,0,0,0.9)), url('https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=1200&fit=crop')` }}>
+                      <div className="aspect-video w-full relative flex flex-col items-center justify-center p-6 bg-cover bg-center" style={{ backgroundImage: `linear-gradient(rgba(0,0,0,0.9), rgba(0,0,0,0.9)), url('https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=1200&fit=crop')` }}>
                         <div className="text-center max-w-sm sm:max-w-md space-y-5 z-10">
                           <div className="inline-flex items-center gap-1.5 bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 px-3 py-1 text-[11px] font-bold rounded-lg uppercase tracking-wide">
                             Upcoming Event Preview Hub
@@ -1171,11 +1402,11 @@ export default function App() {
                               {trailerLoading ? (
                                 <>
                                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                  Computing AI Film scenes...
+                                  Generating 3-Scene AI Trailer...
                                 </>
                               ) : (
                                 <>
-                                  🎬 Experience Cinematic Trailer {currentUser.subscriptionPlan === "Free" && <span className="text-[9px] bg-amber-400 font-extrabold text-black px-1.5 py-0.5 rounded ml-1 animate-pulse shrink-0">✨ PREMIUM</span>}
+                                  🎬 Generate Cinematic Trailer Preview
                                 </>
                               )}
                             </button>
@@ -1186,95 +1417,38 @@ export default function App() {
                               Unlock Live DVR Nodes
                             </button>
                           </div>
-                          <p className="text-[10px] text-zinc-500">
-                            *Watch short 4-scene analytical trailers outlining key roster clashes and tactical systems.
-                          </p>
                         </div>
                       </div>
-                    ) : activeMatch.highlightsUrl ? (
-                      <div className="w-full h-full relative group">
-                        {/* Real video integration placeholder / HLS support fallback */}
-                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent p-4 flex flex-col justify-end text-xs opacity-0 group-hover:opacity-100 transition-opacity z-15">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <button className="bg-primary-blue p-2 rounded-full text-white cursor-pointer hover:scale-105">
-                                <Pause className="w-4 h-4 fill-white" />
-                              </button>
-                              <span>📶 Licensed Low-Latency Streaming Protocol via <b>{activeMatch.streamProvider} Ready</b></span>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <span>🔊 Live Stereo Audio</span>
-                              <span className="bg-zinc-800 p-1 rounded font-mono text-xs">{streamResolution}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Interactive HUD Overlay for Non-paying free guests */}
-                        {currentUser.subscriptionPlan === "Free" && activeMatch.streamProvider === "HLS" && (
-                          <div className="absolute inset-0 bg-brand-dark/95 flex flex-col items-center justify-center text-center p-6 z-20">
-                            <div className="max-w-md space-y-4">
-                              <div className="bg-amber-500/10 border border-amber-500/30 text-amber-300 px-3 py-1.5 rounded-lg text-xs font-semibold mx-auto w-fit flex items-center gap-2">
-                                <Lock className="w-4 h-4" /> Guest View Blocked 
-                              </div>
-                              <h3 className="text-xl font-bold font-display">Upgrade to Unlock Low-Latency HLS Broadcasts</h3>
-                              <p className="text-xs text-zinc-400">
-                                This live stream is reserved under global sports licensing rules. Unlock Full HD, Multiple Devices, and DVR Controls today. 
-                              </p>
-                              <button 
-                                id="btn-upgrade-stream-lock"
-                                onClick={() => setActiveTab("vip")}
-                                className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-yellow-500 text-brand-dark font-extrabold rounded-lg text-xs transition-transform hover:scale-105"
-                              >
-                                Unlock Instantly with Plan ✨
-                              </button>
-                              <div className="pt-2">
-                                <button className="text-[11px] text-zinc-400 underline hover:text-white" onClick={() => handleSelectMatch(matches.find(m => m.id === "m4") || matches[0])}>
-                                  Or Watch Finished Match Highlights Instead
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* HIGHWAY/YOUTUBE VIDEO OVERLAY SIMULATOR */}
-                        {activeMatch.status === MatchStatus.FINISHED ? (
-                          <iframe 
-                            className="w-full h-full"
-                            src={activeMatch.highlightsUrl}
-                            title="Match Highlights"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture-web-share"
-                            allowFullScreen
-                          ></iframe>
-                        ) : (
-                          currentUser.subscriptionPlan !== "Free" ? (
-                            <div className="w-full h-full relative bg-cover bg-center flex flex-col items-center justify-center p-6" style={{ backgroundImage: "linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)), url('https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=1200&h=800&fit=crop&q=80')" }}>
-                              <div className="text-center space-y-4 z-10 w-full max-w-lg">
-                                <div className="animate-spin text-primary-blue inline-block rounded-full border-t-2 border-r-2 border-white w-10 h-10 mb-2"></div>
-                                <h4 className="text-lg font-bold font-display text-white">Connecting Stable CDN Stream Nodes...</h4>
-                                <div className="bg-white/5 border border-white/10 rounded-xl p-3 space-y-1.5 text-xs text-zinc-300 text-left font-mono">
-                                  <p className="flex justify-between"><span>📡 Transport Hub ID:</span> <span className="text-emerald-400">{activeMatch.streamProvider}</span></p>
-                                  <p className="flex justify-between"><span>🌍 Handshake Latency:</span> <span>18ms (Low Latency)</span></p>
-                                  <p className="flex justify-between"><span>🎥 Subtitles:</span> <span>Automatic (Multiple Languages)</span></p>
-                                  <p className="flex justify-between"><span>🎯 Active Live Channel:</span> <span className="text-white font-bold">{activeMatch.homeTeam} vs {activeMatch.awayTeam}</span></p>
-                                </div>
-                                <p className="text-[10px] text-zinc-500">
-                                  *Broadcast is fully certified to run over Cloudflare Stream, Mux, or AWS media delivery edge systems.
-                                </p>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center space-y-3">
-                              <Tv className="w-12 h-12 text-zinc-600 animate-pulse" />
-                              <p className="text-xs text-zinc-400">Unlock feed or sign up to experience complete stream control.</p>
-                            </div>
-                          )
-                        )}
+                    ) : activeMatch.status === MatchStatus.FINISHED && activeMatch.highlightsUrl ? (
+                      <div className="aspect-video w-full relative">
+                        <iframe 
+                          className="w-full h-full"
+                          src={activeMatch.highlightsUrl}
+                          title="Match Highlights"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture-web-share"
+                          allowFullScreen
+                        ></iframe>
                       </div>
                     ) : (
-                      <div className="text-center p-8 text-zinc-500">
-                        <Tv className="w-16 h-16 mx-auto text-zinc-700 mb-3" />
-                        <p className="text-sm font-semibold">No direct digital signal configured for this event</p>
-                      </div>
+                      <HlsVideoPlayer
+                        match={activeMatch}
+                        transponders={transponders}
+                        activeTransponder={activeTransponder}
+                        onSelectTransponder={handleSelectTransponder}
+                        locked={Boolean(sleepMood?.locked)}
+                        lockReason={sleepMood?.reason}
+                        viewsUsed={sleepMood?.viewsUsed ?? 0}
+                        viewsLimit={sleepMood?.viewsLimit ?? 2}
+                        onUpgradeClick={() => setActiveTab("vip")}
+                        onOpenReferrals={() => {
+                          fetchSleepMoodAndReferrals();
+                          setReferralModalOpen(true);
+                        }}
+                        onToggleFloatingPip={() => setIsPlayoutActive(prev => !prev)}
+                        isFloatingPipActive={isPlayoutActive}
+                        streamResolution={streamResolution}
+                        onResolutionChange={setStreamResolution}
+                      />
                     )}
                   </div>
 
@@ -2755,68 +2929,120 @@ export default function App() {
         </div>
       )}
 
-      {/* ---------------- STRIPE CHECKOUT PAYMENT SIMULATOR MODAL ---------------- */}
+      {/* ---------------- MULTI-PROVIDER CHECKOUT & COUPON MODAL ---------------- */}
       {checkoutModalOpen && (
         <div id="checkout-modal" className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-brand-dark p-6 rounded-2xl border border-white/10 w-full max-w-md space-y-4">
             <div className="flex justify-between items-center pb-2 border-b border-white/5">
               <div>
-                <h4 className="font-bold text-base font-display">Stripe Secured Checkout</h4>
+                <h4 className="font-bold text-base font-display">AdSLiveTv Secure Checkout</h4>
                 <p className="text-[11px] text-zinc-400">Synchronized upgrade for: <b>{checkoutPlan}</b> Plan</p>
               </div>
-              <button onClick={() => setCheckoutModalOpen(false)} className="text-zinc-400 hover:text-white font-bold text-sm">✕</button>
+              <button onClick={() => setCheckoutModalOpen(false)} className="text-zinc-400 hover:text-white font-bold text-sm cursor-pointer">✕</button>
             </div>
 
             <div className="space-y-3 font-mono text-xs">
-              <div className="p-3 bg-zinc-950 border rounded-xl border-white/5 flex justify-between">
+              {/* Total Summary */}
+              <div className="p-3 bg-zinc-950 border rounded-xl border-white/5 flex justify-between items-center">
                 <span>Total Amount:</span>
-                <span className="font-bold text-emerald-400">
-                  {checkoutPlan === "VIP" ? (couponCode.toUpperCase() === "ADSRULE" ? "$39.99" : "$49.99") : (couponCode.toUpperCase() === "ADSRULE" ? "$15.99" : "$19.99")}
-                </span>
+                <div className="text-right">
+                  {validatedCouponDiscount > 0 && (
+                    <span className="text-zinc-500 line-through mr-2 text-[11px]">
+                      ${checkoutPlan === "VIP" ? "49.99" : "19.99"}
+                    </span>
+                  )}
+                  <span className="font-bold text-emerald-400 text-sm">
+                    ${((checkoutPlan === "VIP" ? 49.99 : 19.99) * (1 - validatedCouponDiscount / 100)).toFixed(2)}
+                  </span>
+                </div>
               </div>
 
-              {/* Stripe fields */}
+              {/* Payment Provider Selector */}
               <div className="space-y-1.5">
-                <label className="text-[10px] text-zinc-400">Cardholder Name</label>
-                <input 
-                  type="text" 
-                  value={currentUser.name}
-                  disabled
-                  className="w-full bg-black/30 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-zinc-400"
-                />
+                <label className="text-[10px] text-zinc-400">Select Payment Method</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: "stripe" as const, label: "💳 Stripe Card" },
+                    { id: "paypal" as const, label: "🅿️ PayPal" },
+                    { id: "crypto" as const, label: "🪙 Crypto USDT" }
+                  ].map((pm) => (
+                    <button
+                      key={pm.id}
+                      type="button"
+                      onClick={() => setPaymentMethod(pm.id)}
+                      className={`py-2 px-2 rounded-xl border text-[11px] font-sans font-bold transition-all cursor-pointer ${
+                        paymentMethod === pm.id
+                          ? "bg-primary-blue border-primary-blue text-white"
+                          : "bg-black/40 border-white/10 text-zinc-400 hover:text-white"
+                      }`}
+                    >
+                      {pm.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] text-zinc-400">Stripe Test Card Number</label>
-                <input 
-                  type="text" 
-                  value={creditCardNumber} 
-                  onChange={(e) => setCreditCardNumber(e.target.value)}
-                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-1.5 text-xs"
-                />
-              </div>
+              {paymentMethod === "stripe" && (
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-zinc-400">Cardholder Name</label>
+                    <input 
+                      type="text" 
+                      value={currentUser.name}
+                      disabled
+                      className="w-full bg-black/30 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-zinc-400"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-zinc-400">Stripe Test Card Number</label>
+                    <input 
+                      type="text" 
+                      value={creditCardNumber} 
+                      onChange={(e) => setCreditCardNumber(e.target.value)}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-1.5 text-xs"
+                    />
+                  </div>
+                </>
+              )}
+
+              {paymentMethod === "paypal" && (
+                <div className="p-3 bg-blue-950/30 border border-blue-500/20 rounded-xl text-[11px] font-sans text-blue-200">
+                  Express PayPal Express Checkout session ready for <b>{currentUser.email || currentUser.name}</b>.
+                </div>
+              )}
+
+              {paymentMethod === "crypto" && (
+                <div className="p-3 bg-emerald-950/30 border border-emerald-500/20 rounded-xl text-[10px] space-y-1">
+                  <span className="text-emerald-300 font-bold block">TRC-20 / ERC-20 Instant Deposit Node</span>
+                  <code className="block bg-black/50 p-1.5 rounded text-zinc-300 select-all">0xAdSLiveTv2026Vault778899USDT</code>
+                </div>
+              )}
 
               {/* Coupon inputs */}
               <div className="space-y-1">
-                <label className="text-[10px] text-zinc-400">Promotional Code coupon</label>
+                <label className="text-[10px] text-zinc-400">Promotional Sealer Code (e.g. ADSRULE, VIP50, REFVIP30)</label>
                 <div className="flex gap-2">
                   <input 
+                    id="inp-checkout-coupon"
                     type="text" 
-                    placeholder="Enter Coupon code (e.g. ADSRULE)" 
+                    placeholder="Enter Coupon Code" 
                     value={couponCode} 
                     onChange={(e) => setCouponCode(e.target.value)}
                     className="flex-1 bg-black/40 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white uppercase font-sans"
                   />
                   <button 
+                    id="btn-apply-coupon"
                     type="button" 
                     onClick={handleApplyCoupon}
-                    className="bg-zinc-800 hover:bg-zinc-700 text-white text-[11px] px-3 py-1 rounded-xl font-bold"
+                    className="bg-zinc-800 hover:bg-zinc-700 text-white text-[11px] px-3 py-1 rounded-xl font-bold cursor-pointer"
                   >
                     Apply
                   </button>
                 </div>
                 {couponResult && (
-                  <p className="text-[10px] text-emerald-400 font-sans mt-1">{couponResult}</p>
+                  <p className={`text-[10px] font-sans mt-1 ${validatedCouponDiscount > 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                    {couponResult}
+                  </p>
                 )}
               </div>
 
@@ -2825,18 +3051,190 @@ export default function App() {
                 id="btn-confirm-checkout"
                 disabled={checkoutProcessing}
                 onClick={handleProcessCheckout}
-                className="w-full py-3 bg-primary-blue hover:bg-primary-blue/95 text-white font-extrabold text-xs rounded-xl mt-4 flex items-center justify-center gap-2"
+                className="w-full py-3 bg-primary-blue hover:bg-primary-blue/95 text-white font-extrabold text-xs rounded-xl mt-4 flex items-center justify-center gap-2 cursor-pointer"
               >
                 {checkoutProcessing ? (
-                  <span className="animate-pulse">Authorizing payment with Stripe...</span>
+                  <span className="animate-pulse">Authorizing payment with {paymentMethod.toUpperCase()}...</span>
                 ) : (
-                  <>🔑 Complete mock Payment & Upgrade Account</>
+                  <>🔑 Complete {paymentMethod.toUpperCase()} Checkout & Unlock VIP</>
                 )}
               </button>
 
               <p className="text-[9px] text-zinc-500 text-center leading-relaxed font-sans mt-2">
-                *Stripe billing parameters, customer creation protocols, and webhook setups are simulated. No real funds are transferred during testing operations.
+                *Server-side coupon validation and checkout totals are verified dynamically against Administrator Sealer records.
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---------------- SLEEPMOOD & REFERRAL UNLOCK MODAL ---------------- */}
+      {referralModalOpen && (
+        <div id="referral-modal" className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-brand-dark p-6 rounded-2xl border border-white/10 w-full max-w-lg space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                  <Moon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-base font-display text-white">SleepMood & Referral Unlock Hub</h4>
+                  <p className="text-[11px] text-zinc-400">Unlock free live streaming by inviting friends or applying VIP promos</p>
+                </div>
+              </div>
+              <button onClick={() => setReferralModalOpen(false)} className="text-zinc-400 hover:text-white font-bold text-sm cursor-pointer">✕</button>
+            </div>
+
+            {/* SleepMood Status Banner */}
+            <div className={`p-3.5 rounded-xl border text-xs space-y-1.5 ${
+              sleepMood?.locked
+                ? "bg-amber-500/10 border-amber-500/30 text-amber-200"
+                : "bg-emerald-500/10 border-emerald-500/25 text-emerald-200"
+            }`}>
+              <div className="flex items-center justify-between font-mono text-[11px] font-bold">
+                <span>{sleepMood?.locked ? "🔒 SLEEPMOOD GATING ACTIVE" : "✅ STREAM ACCESS ACTIVE"}</span>
+                <span>Views: {sleepMood?.viewsUsed ?? 0}/{sleepMood?.viewsLimit ?? 2}</span>
+              </div>
+              <p className="text-[11px] text-zinc-300">
+                {sleepMood?.locked
+                  ? sleepMood.reason
+                  : currentUser.subscriptionPlan !== "Free"
+                  ? `Bypassed automatically via ${currentUser.subscriptionPlan} membership.`
+                  : sleepMood?.referralUnlocked
+                  ? "Unlocked for free via completed Referral Program milestone!"
+                  : `Free accounts enjoy ${sleepMood?.viewsLimit ?? 2} stream views before SleepMood activates.`}
+              </p>
+              {sleepMood?.peakTrafficSchedule && (
+                <p className="text-[10px] font-mono text-amber-300">⚡ Peak Schedule Active: {sleepMood.peakWindowLabel}</p>
+              )}
+            </div>
+
+            {/* Unique Referral Link */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-mono text-zinc-400">Your Unique Referral Invite Link</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={referralStats?.referralLink || `${window.location.origin}/ref/${currentUser.id}`}
+                  className="flex-1 bg-black/50 border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-zinc-200"
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyReferralLink}
+                  className="px-3.5 py-2 bg-primary-blue hover:bg-primary-blue/90 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  {copiedRefLink ? "Copied!" : "Copy"}
+                </button>
+              </div>
+            </div>
+
+            {/* Referral Progress & Gamified Badges */}
+            {referralStats && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-2.5 text-center">
+                  <div className="bg-black/40 border border-white/5 rounded-xl p-2.5">
+                    <span className="text-[10px] font-mono text-zinc-400 block">Rank Badge</span>
+                    <span className="text-xs font-bold text-amber-400 flex items-center justify-center gap-1 mt-0.5">
+                      <Award className="w-3.5 h-3.5" />
+                      {referralStats.rankBadge}
+                    </span>
+                  </div>
+                  <div className="bg-black/40 border border-white/5 rounded-xl p-2.5">
+                    <span className="text-[10px] font-mono text-zinc-400 block">Reward Points</span>
+                    <span className="text-sm font-bold font-mono text-primary-blue">{referralStats.points} pts</span>
+                  </div>
+                  <div className="bg-black/40 border border-white/5 rounded-xl p-2.5">
+                    <span className="text-[10px] font-mono text-zinc-400 block">Bonus VIP Days</span>
+                    <span className="text-sm font-bold font-mono text-emerald-400">+{referralStats.bonusVipDays} days</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs font-mono">
+                    <span className="text-zinc-300">Free Unlock Progress ({referralStats.referralsCount}/{referralStats.requiredCount} referrals)</span>
+                    <span className={referralStats.unlockedFreeAccess ? "text-emerald-400 font-bold" : "text-amber-400"}>
+                      {referralStats.unlockedFreeAccess ? "UNLOCKED" : `${Math.max(0, referralStats.requiredCount - referralStats.referralsCount)} left`}
+                    </span>
+                  </div>
+                  <div className="w-full h-2.5 bg-zinc-900 rounded-full overflow-hidden border border-white/5">
+                    <div
+                      className="h-full bg-gradient-to-r from-primary-blue to-emerald-400 transition-all duration-500"
+                      style={{
+                        width: `${Math.min(100, Math.round((referralStats.referralsCount / Math.max(1, referralStats.requiredCount)) * 100))}%`
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Earned Referral Coupons */}
+                {referralStats.rewardCoupons.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-mono uppercase text-zinc-400">Earned Exclusive Coupons</span>
+                    <div className="flex flex-wrap gap-2">
+                      {referralStats.rewardCoupons.map((c) => (
+                        <button
+                          key={c.code}
+                          type="button"
+                          onClick={() => {
+                            setReferralModalOpen(false);
+                            triggerCheckout("VIP");
+                            setCouponCode(c.code);
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-mono font-bold hover:bg-emerald-500/25 cursor-pointer"
+                        >
+                          🎟️ {c.code} ({c.discountPercent}% OFF) — Use Now
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Record / Test Friend Sign-up */}
+                <form onSubmit={handleClaimReferral} className="bg-black/30 border border-white/5 rounded-xl p-3 space-y-2.5">
+                  <span className="text-[10px] font-mono uppercase text-zinc-400 block">Claim Referral Sign-up Credit</span>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="text"
+                      value={refFriendName}
+                      onChange={(e) => setRefFriendName(e.target.value)}
+                      placeholder="Invited Friend Name"
+                      required
+                      className="flex-1 bg-black/50 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white"
+                    />
+                    <select
+                      value={refFriendPlan}
+                      onChange={(e) => setRefFriendPlan(e.target.value as "Free" | "Premium" | "VIP")}
+                      className="bg-black/50 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200"
+                    >
+                      <option value="Free">Free Sign-Up (+150 pts)</option>
+                      <option value="Premium">Premium Upgrade (+VIP Days & Coupon)</option>
+                      <option value="VIP">VIP Upgrade (+VIP Days & Coupon)</option>
+                    </select>
+                    <button
+                      type="submit"
+                      disabled={referralClaiming}
+                      className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs rounded-lg cursor-pointer disabled:opacity-50"
+                    >
+                      {referralClaiming ? "Claiming..." : "+ Credit"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-white/5">
+              <button
+                type="button"
+                onClick={() => {
+                  setReferralModalOpen(false);
+                  setActiveTab("vip");
+                }}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs rounded-xl cursor-pointer"
+              >
+                Or Upgrade Plan Instantly
+              </button>
             </div>
           </div>
         </div>
@@ -2935,7 +3333,33 @@ export default function App() {
           
           {/* Miniature Canvas */}
           <div className="aspect-video relative bg-black flex flex-col justify-center items-center overflow-hidden">
-            {isTrailerPlaying && activeTrailer ? (
+            {sleepMood?.locked ? (
+              <div className="text-center p-3 space-y-1.5 select-none">
+                <span className="bg-amber-500/15 border border-amber-500/30 text-amber-300 px-2 py-0.5 rounded text-[9px] font-mono font-bold inline-block">
+                  🌙 SLEEPMOOD ACTIVE
+                </span>
+                <p className="text-[10px] text-zinc-300 font-sans leading-tight">
+                  Upgrade account or unlock free via referrals.
+                </p>
+                <div className="flex justify-center gap-1.5 pt-1">
+                  <button
+                    onClick={() => setActiveTab("vip")}
+                    className="text-[9px] bg-amber-500 text-zinc-950 font-extrabold px-2 py-0.5 rounded cursor-pointer"
+                  >
+                    Upgrade
+                  </button>
+                  <button
+                    onClick={() => {
+                      fetchSleepMoodAndReferrals();
+                      setReferralModalOpen(true);
+                    }}
+                    className="text-[9px] bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold px-2 py-0.5 rounded cursor-pointer"
+                  >
+                    Referrals
+                  </button>
+                </div>
+              </div>
+            ) : isTrailerPlaying && activeTrailer ? (
               // Mini trailer slide
               <div className="w-full h-full relative" style={{ backgroundImage: `linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.8)), url(${activeTrailer.scenes[currentTrailerSceneIdx]?.image})`, backgroundSize: "cover", backgroundPosition: "center" }}>
                 <div className="absolute inset-0 p-3 flex flex-col justify-between text-left">
@@ -2950,7 +3374,7 @@ export default function App() {
                   </div>
                 </div>
               </div>
-            ) : activeMatch.highlightsUrl ? (
+            ) : activeMatch.status === MatchStatus.FINISHED && activeMatch.highlightsUrl ? (
               // Mini highlights iframe
               <div className="w-full h-full">
                 <iframe 
@@ -2960,21 +3384,15 @@ export default function App() {
                 ></iframe>
               </div>
             ) : (
-              // Mini live cdn / stats
+              // Mini live HLS transponder status
               <div className="w-full h-full bg-cover bg-center flex flex-col items-center justify-center p-2 relative" style={{ backgroundImage: "linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)), url('https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=400&fit=crop')" }}>
-                {currentUser.subscriptionPlan === "Free" && activeMatch.streamProvider === "HLS" ? (
-                  <div className="text-center p-2 space-y-1 select-none">
-                    <span className="bg-amber-500/10 text-amber-300 px-1 py-0.5 rounded text-[8px] font-bold inline-block">GUEST SHUTDOWN</span>
-                    <p className="text-[9px] text-zinc-400 font-sans leading-tight">Pro/VIP license required to watch live stream broadcast.</p>
-                    <button onClick={() => setActiveTab("vip")} className="text-[9px] bg-amber-500 text-brand-dark font-extrabold px-2 py-0.5 rounded mt-1">Upgrade Tier</button>
-                  </div>
-                ) : (
-                  <div className="text-center p-1 font-mono">
-                    <div className="w-4 h-4 rounded-full border border-white border-t-transparent animate-spin mx-auto mb-1"></div>
-                    <p className="text-[9px] text-emerald-400 font-bold tracking-wider animate-pulse">CDN STREAM RE-ROUTING...</p>
-                    <p className="text-[8px] text-zinc-500">Latency: 14ms | Provider: {activeMatch.streamProvider}</p>
-                  </div>
-                )}
+                <div className="text-center p-1 font-mono space-y-1">
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                  <p className="text-[10px] text-emerald-400 font-bold tracking-wider">
+                    {activeTransponder?.name || activeMatch.streamProvider} LIVE
+                  </p>
+                  <p className="text-[8px] text-zinc-400">{streamResolution} • HLS Adaptive</p>
+                </div>
               </div>
             )}
           </div>

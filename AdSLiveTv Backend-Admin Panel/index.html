@@ -662,6 +662,29 @@
               <div id="test-output-ESPN" class="hidden text-[10px] font-mono p-2 border-l-2 rounded-r-lg bg-zinc-900 border-white/15"></div>
             </div>
 
+            <!-- Row: Stripe Billing Key + Read-Only Gemini Status -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="space-y-1.5">
+                <div class="flex justify-between items-center">
+                  <label class="text-xs font-mono text-zinc-300">Stripe Secret Key</label>
+                  <span id="masked-stripe" class="text-[10px] font-mono text-zinc-500">****</span>
+                </div>
+                <input 
+                  type="text" 
+                  id="stripe-key" 
+                  placeholder="sk_test_..." 
+                  class="w-full bg-black/40 border border-white/5 focus:border-primary-blue/50 outline-none rounded-xl px-3 py-2 text-xs font-mono text-zinc-200 transition-all"
+                />
+              </div>
+              <div class="space-y-1.5">
+                <label class="text-xs font-mono text-zinc-300">Gemini AI Engine (Server Env)</label>
+                <div class="w-full bg-black/40 border border-white/5 rounded-xl px-3 py-2 text-xs font-mono flex items-center justify-between">
+                  <span class="text-zinc-400">Server Key Status:</span>
+                  <span id="gemini-engine-status" class="font-bold text-zinc-400">Checking...</span>
+                </div>
+              </div>
+            </div>
+
             <!-- Commit button -->
             <div class="pt-4">
               <button 
@@ -679,11 +702,124 @@
           </div>
         </section>
 
+        <!-- ADMINISTRATOR COUPON & DISCOUNT SEALER CARD -->
+        <section class="bg-brand-card p-6 rounded-2xl border border-white/5 shadow-xl space-y-5">
+          <div class="flex items-center justify-between pb-3 border-b border-white/5">
+            <div>
+              <h2 class="font-bold text-base font-display text-white">🎟️ Administrator Coupon & Discount Sealer</h2>
+              <p class="text-xs text-zinc-400">Create promotional discount codes and dynamically seal or unseal active redemptions.</p>
+            </div>
+            <button type="button" onclick="fetchAdminCoupons()" class="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-zinc-300 rounded-lg text-[11px] font-mono border border-white/10">
+              Reload Codes
+            </button>
+          </div>
+
+          <form id="coupon-create-form" class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+            <div class="sm:col-span-3">
+              <label class="text-[10px] font-mono text-zinc-400 block mb-1">Coupon Code</label>
+              <input type="text" id="coupon-code-input" placeholder="e.g. WORLD50" required class="w-full rounded-xl px-3 py-2 text-xs font-mono uppercase border border-white/5" />
+            </div>
+            <div class="sm:col-span-2">
+              <label class="text-[10px] font-mono text-zinc-400 block mb-1">Discount %</label>
+              <input type="number" id="coupon-discount-input" min="1" max="100" value="25" required class="w-full rounded-xl px-3 py-2 text-xs font-mono border border-white/5" />
+            </div>
+            <div class="sm:col-span-4">
+              <label class="text-[10px] font-mono text-zinc-400 block mb-1">Description</label>
+              <input type="text" id="coupon-desc-input" placeholder="Weekend VIP Promo" required class="w-full rounded-xl px-3 py-2 text-xs border border-white/5" />
+            </div>
+            <div class="sm:col-span-3">
+              <label class="text-[10px] font-mono text-zinc-400 block mb-1">Max Uses</label>
+              <input type="number" id="coupon-maxuses-input" min="1" value="100" required class="w-full rounded-xl px-3 py-2 text-xs font-mono border border-white/5" />
+            </div>
+            <div class="sm:col-span-12">
+              <button type="submit" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all cursor-pointer">
+                + Generate & Activate Coupon Code
+              </button>
+            </div>
+          </form>
+
+          <div id="coupon-feedback" class="hidden p-2.5 rounded-xl text-center text-xs font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/20"></div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs text-zinc-300 border-collapse">
+              <thead>
+                <tr class="border-b border-white/5 text-[10px] uppercase font-mono text-zinc-400">
+                  <th class="py-2 px-2">Code</th>
+                  <th class="py-2 px-2">Discount</th>
+                  <th class="py-2 px-2">Usage</th>
+                  <th class="py-2 px-2">State</th>
+                  <th class="py-2 px-2 text-right">Sealer Action</th>
+                </tr>
+              </thead>
+              <tbody id="coupons-table-body" class="divide-y divide-white/5 font-mono text-[11px]">
+                <tr><td colspan="5" class="py-4 text-center text-zinc-500">Loading coupons...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
       </div>
 
-      <!-- RIGHT ACTION PANEL: SCORE MODERATOR & HEALTH (5 COLS) -->
+      <!-- RIGHT ACTION PANEL: SLEEPMOOD, SCORE MODERATOR & HEALTH (5 COLS) -->
       <div class="lg:col-span-5 space-y-8">
         
+        <!-- SLEEPMOOD & ACCOUNT GATING MASTER CONTROL CARD -->
+        <section class="bg-brand-card p-6 rounded-2xl border border-amber-500/20 shadow-xl space-y-5">
+          <div class="flex items-center justify-between pb-3 border-b border-white/5">
+            <div>
+              <h2 class="font-bold text-base font-display text-white">🌙 SleepMood & Gating Master Control</h2>
+              <p class="text-xs text-zinc-400">Enforce Free account stream view caps, peak schedules, and referral unlocks.</p>
+            </div>
+            <span id="sleepmood-badge" class="text-[10px] font-mono font-bold px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">
+              ACTIVE
+            </span>
+          </div>
+
+          <form id="sleepmood-config-form" class="space-y-4 text-xs">
+            <label class="flex items-center justify-between p-3 rounded-xl bg-black/30 border border-white/5 cursor-pointer">
+              <div>
+                <span class="font-bold text-white block">Global SleepMood Master Switch</span>
+                <span class="text-[10px] text-zinc-400">When ON, Free accounts lock after exceeding view thresholds</span>
+              </div>
+              <input type="checkbox" id="sleepmood-enabled" class="w-4 h-4 accent-amber-500 cursor-pointer" />
+            </label>
+
+            <label class="flex items-center justify-between p-3 rounded-xl bg-black/30 border border-white/5 cursor-pointer">
+              <div>
+                <span class="font-bold text-white block">Peak Live Traffic Auto-Schedule</span>
+                <span class="text-[10px] text-zinc-400">Immediately gate Free users during high-traffic match windows</span>
+              </div>
+              <input type="checkbox" id="sleepmood-peak-schedule" class="w-4 h-4 accent-amber-500 cursor-pointer" />
+            </label>
+
+            <div class="grid grid-cols-3 gap-3">
+              <div>
+                <label class="text-[10px] font-mono text-zinc-400 block mb-1">Free View Cap</label>
+                <input type="number" id="sleepmood-trigger-views" min="1" max="10" value="2" class="w-full rounded-xl px-3 py-2 text-xs font-mono border border-white/5" />
+              </div>
+              <div>
+                <label class="text-[10px] font-mono text-zinc-400 block mb-1">Referrals Req.</label>
+                <input type="number" id="sleepmood-referral-threshold" min="1" max="10" value="3" class="w-full rounded-xl px-3 py-2 text-xs font-mono border border-white/5" />
+              </div>
+              <div>
+                <label class="text-[10px] font-mono text-zinc-400 block mb-1">Bonus VIP Days</label>
+                <input type="number" id="sleepmood-bonus-days" min="1" max="90" value="7" class="w-full rounded-xl px-3 py-2 text-xs font-mono border border-white/5" />
+              </div>
+            </div>
+
+            <label class="flex items-center gap-2 text-[11px] text-zinc-300 cursor-pointer">
+              <input type="checkbox" id="sleepmood-reset-views" class="w-3.5 h-3.5 accent-blue-500" />
+              <span>Reset Free User Stream View Counters on Save</span>
+            </label>
+
+            <button type="submit" class="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-extrabold text-xs rounded-xl transition-all cursor-pointer">
+              Apply SleepMood Gating Rules
+            </button>
+          </form>
+
+          <div id="sleepmood-save-alert" class="hidden p-2.5 rounded-xl text-center text-xs font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/20"></div>
+        </section>
+
         <!-- SCOREBOARD GOAL CREATOR PANEL -->
         <section class="bg-brand-card p-6 rounded-2xl border border-white/5 shadow-xl space-y-6">
           <div class="flex items-center gap-3 pb-3 border-b border-white/5">
@@ -980,11 +1116,21 @@
     async function syncAllPanels() {
       appendLog("Forcing complete system dashboard synchronization...");
       await fetchAdminConfig();
+      await fetchSleepMoodAdmin();
+      await fetchAdminCoupons();
       await loadActiveMatches();
       await fetchActiveSubscriptions();
       await fetchRealTimeMetrics();
       await fetchActiveBroadcastAlert();
       appendLog("Dashboard modules synchronized with running Node server context.", "success");
+    }
+
+    function getAdminAuthHeaders() {
+      const token = localStorage.getItem("admin_session_token") || "";
+      return {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      };
     }
 
     // Initial config fetching and inputs mapping
@@ -1001,6 +1147,20 @@
             document.getElementById("masked-sportmonks").innerText = data.masked.sportMonksKey || "N/A";
             document.getElementById("masked-firebase").innerText = data.masked.firebaseKey || "N/A";
             document.getElementById("masked-espn").innerText = data.masked.espnApiKey || "N/A";
+            const maskedStripe = document.getElementById("masked-stripe");
+            if (maskedStripe) maskedStripe.innerText = data.masked.stripeKey || "N/A";
+          }
+
+          // Read-only Gemini AI Server Status
+          const geminiStatusEl = document.getElementById("gemini-engine-status");
+          if (geminiStatusEl) {
+            if (data.geminiConfigured) {
+              geminiStatusEl.textContent = "CONNECTED";
+              geminiStatusEl.className = "font-bold text-emerald-400";
+            } else {
+              geminiStatusEl.textContent = "FALLBACK MODE";
+              geminiStatusEl.className = "font-bold text-amber-400";
+            }
           }
           
           // Fill inputs
@@ -1013,10 +1173,191 @@
             document.getElementById("ga-id").value = data.actual.googleAnalyticsId || "";
             document.getElementById("firebase-key").value = data.actual.firebaseKey || "";
             document.getElementById("espn-api-key").value = data.actual.espnApiKey || "";
+            const stripeInput = document.getElementById("stripe-key");
+            if (stripeInput) stripeInput.value = data.actual.stripeKey || "";
           }
         }
       } catch (err) {
         appendLog("Error calling core credentials endpoint: " + err.message, "error");
+      }
+    }
+
+    // SleepMood Admin Control Load & Save
+    async function fetchSleepMoodAdmin() {
+      try {
+        const res = await fetch("/api/sleepmood/status");
+        if (!res.ok) return;
+        const sm = await res.json();
+        document.getElementById("sleepmood-enabled").checked = Boolean(sm.sleepMoodEnabled);
+        document.getElementById("sleepmood-peak-schedule").checked = Boolean(sm.peakTrafficSchedule);
+        document.getElementById("sleepmood-trigger-views").value = sm.autoTriggerViews || 2;
+        document.getElementById("sleepmood-referral-threshold").value = sm.referralThreshold || 3;
+        document.getElementById("sleepmood-bonus-days").value = sm.bonusVipDays || 7;
+        const badge = document.getElementById("sleepmood-badge");
+        if (badge) {
+          badge.textContent = sm.sleepMoodEnabled ? "ON" : "OFF";
+          badge.className = sm.sleepMoodEnabled
+            ? "text-[10px] font-mono font-bold px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30"
+            : "text-[10px] font-mono font-bold px-2.5 py-1 rounded-full bg-zinc-800 text-zinc-400 border border-white/10";
+        }
+      } catch (err) {
+        appendLog("Failed to load SleepMood state: " + err.message, "error");
+      }
+    }
+
+    document.getElementById("sleepmood-config-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const payload = {
+        enabled: document.getElementById("sleepmood-enabled").checked,
+        peakTrafficSchedule: document.getElementById("sleepmood-peak-schedule").checked,
+        autoTriggerViews: Number(document.getElementById("sleepmood-trigger-views").value) || 2,
+        referralThreshold: Number(document.getElementById("sleepmood-referral-threshold").value) || 3,
+        bonusVipDays: Number(document.getElementById("sleepmood-bonus-days").value) || 7,
+        resetViews: document.getElementById("sleepmood-reset-views").checked
+      };
+
+      try {
+        const res = await fetch("/api/admin/sleepmood/toggle", {
+          method: "POST",
+          headers: getAdminAuthHeaders(),
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          document.getElementById("sleepmood-reset-views").checked = false;
+          await fetchSleepMoodAdmin();
+          await fetchAuditLogsAndRender();
+          const alertEl = document.getElementById("sleepmood-save-alert");
+          alertEl.textContent = "SleepMood master controls updated successfully.";
+          alertEl.classList.remove("hidden");
+          setTimeout(() => alertEl.classList.add("hidden"), 3500);
+          appendLog("SleepMood gating rules synchronized.", "success");
+        }
+      } catch (err) {
+        appendLog("Error updating SleepMood: " + err.message, "error");
+      }
+    });
+
+    // Coupon Sealer Admin Load, Create & Seal/Unseal (using safe DOM methods)
+    async function fetchAdminCoupons() {
+      if (localStorage.getItem("admin_session_token") !== "session_token_adslivetv_2026_xyz") return;
+      try {
+        const res = await fetch("/api/admin/coupons", { headers: getAdminAuthHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
+        renderCouponsTable(data.coupons || []);
+      } catch (err) {
+        appendLog("Error loading coupons: " + err.message, "error");
+      }
+    }
+
+    function renderCouponsTable(coupons) {
+      const tbody = document.getElementById("coupons-table-body");
+      if (!tbody) return;
+      tbody.textContent = "";
+
+      if (coupons.length === 0) {
+        const emptyRow = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 5;
+        td.className = "py-4 text-center text-zinc-500";
+        td.textContent = "No coupons created yet.";
+        emptyRow.appendChild(td);
+        tbody.appendChild(emptyRow);
+        return;
+      }
+
+      coupons.forEach((c) => {
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-white/5 transition-colors";
+
+        const tdCode = document.createElement("td");
+        tdCode.className = "py-2.5 px-2 font-bold text-white";
+        tdCode.textContent = c.code;
+
+        const tdDisc = document.createElement("td");
+        tdDisc.className = "py-2.5 px-2 text-emerald-400 font-bold";
+        tdDisc.textContent = `${c.discountPercent}% OFF`;
+
+        const tdUses = document.createElement("td");
+        tdUses.className = "py-2.5 px-2 text-zinc-400";
+        tdUses.textContent = `${c.uses}/${c.maxUses}`;
+
+        const tdState = document.createElement("td");
+        tdState.className = "py-2.5 px-2";
+        const stateBadge = document.createElement("span");
+        stateBadge.className = c.sealed
+          ? "px-2 py-0.5 rounded-full text-[9px] font-bold bg-rose-500/20 text-rose-300"
+          : "px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/20 text-emerald-300";
+        stateBadge.textContent = c.sealed ? "SEALED" : "ACTIVE";
+        tdState.appendChild(stateBadge);
+
+        const tdAction = document.createElement("td");
+        tdAction.className = "py-2.5 px-2 text-right";
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = c.sealed
+          ? "px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500 hover:text-black transition-all cursor-pointer"
+          : "px-2.5 py-1 rounded-lg text-[10px] font-bold bg-rose-500/20 text-rose-300 hover:bg-rose-500 hover:text-white transition-all cursor-pointer";
+        btn.textContent = c.sealed ? "Unseal" : "Seal";
+        btn.addEventListener("click", () => toggleCouponSeal(c.code));
+        tdAction.appendChild(btn);
+
+        tr.appendChild(tdCode);
+        tr.appendChild(tdDisc);
+        tr.appendChild(tdUses);
+        tr.appendChild(tdState);
+        tr.appendChild(tdAction);
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById("coupon-create-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const code = document.getElementById("coupon-code-input").value.trim();
+      const discountPercent = Number(document.getElementById("coupon-discount-input").value);
+      const description = document.getElementById("coupon-desc-input").value.trim();
+      const maxUses = Number(document.getElementById("coupon-maxuses-input").value) || 100;
+
+      try {
+        const res = await fetch("/api/admin/coupons/create", {
+          method: "POST",
+          headers: getAdminAuthHeaders(),
+          body: JSON.stringify({ code, discountPercent, description, maxUses })
+        });
+        const data = await res.json();
+        const fb = document.getElementById("coupon-feedback");
+        if (res.ok) {
+          document.getElementById("coupon-code-input").value = "";
+          document.getElementById("coupon-desc-input").value = "";
+          renderCouponsTable(data.coupons || []);
+          await fetchAuditLogsAndRender();
+          fb.textContent = `Coupon ${data.coupon.code} (${data.coupon.discountPercent}% OFF) created!`;
+          fb.className = "p-2.5 rounded-xl text-center text-xs font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/20";
+        } else {
+          fb.textContent = data.error || "Failed to create coupon.";
+          fb.className = "p-2.5 rounded-xl text-center text-xs font-bold text-rose-300 bg-rose-500/15 border border-rose-500/20";
+        }
+        fb.classList.remove("hidden");
+        setTimeout(() => fb.classList.add("hidden"), 4000);
+      } catch (err) {
+        appendLog("Failed to create coupon: " + err.message, "error");
+      }
+    });
+
+    async function toggleCouponSeal(code) {
+      try {
+        const res = await fetch(`/api/admin/coupons/${encodeURIComponent(code)}/toggle-seal`, {
+          method: "POST",
+          headers: getAdminAuthHeaders()
+        });
+        if (res.ok) {
+          const data = await res.json();
+          renderCouponsTable(data.coupons || []);
+          await fetchAuditLogsAndRender();
+          appendLog(`Coupon ${code} status toggled to ${data.coupon.sealed ? "SEALED" : "ACTIVE"}.`, "success");
+        }
+      } catch (err) {
+        appendLog("Failed toggling coupon seal: " + err.message, "error");
       }
     }
 
@@ -1064,6 +1405,7 @@
         sportMonksKey: document.getElementById("sportmonks-key").value,
         muxKey: document.getElementById("mux-key").value,
         cloudflareStreamKey: document.getElementById("cloudflare-key").value,
+        stripeKey: document.getElementById("stripe-key").value,
         newsApiKey: document.getElementById("news-api-key").value,
         googleAnalyticsId: document.getElementById("ga-id").value,
         firebaseKey: document.getElementById("firebase-key").value,

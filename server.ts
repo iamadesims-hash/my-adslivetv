@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
@@ -30,8 +31,45 @@ if (geminiKey) {
 
 const app = express();
 const PORT = 3000;
+const STREAM_SIGNING_SECRET = process.env.STREAM_SIGNING_SECRET || crypto.randomBytes(32).toString("hex");
+const ADMIN_SESSION_TOKEN = process.env.ADMIN_SESSION_TOKEN || "session_token_adslivetv_2026_xyz";
 
 app.use(express.json());
+
+// Admin bearer auth helper
+function requireAdminAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const authHeader = req.headers.authorization || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : (req.headers["x-admin-token"] as string || "");
+  if (token !== ADMIN_SESSION_TOKEN) {
+    return res.status(401).json({ error: "Administrator authentication required." });
+  }
+  next();
+}
+
+// SSRF-safe URL validator for outbound manifest checks
+function isSafeExternalHttpUrl(rawUrl: string): URL | null {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    const host = parsed.hostname.toLowerCase();
+    if (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "::1" ||
+      host === "0.0.0.0" ||
+      host.endsWith(".local") ||
+      host.startsWith("10.") ||
+      host.startsWith("192.168.") ||
+      host.startsWith("169.254.") ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
 
 // IN-MEMORY BACKEND DATA TO MIMIC DATABASE STORAGE
 let serverApiConfig = {
@@ -39,11 +77,184 @@ let serverApiConfig = {
   sportMonksKey: "BJrDtdrcZMvjP11EUh6K7AMwdj6egCCvmnvxzkfK3ORsFnrAcqS1uyqeTp7L",
   muxKey: "MUX_TOKEN_SECRET_999",
   cloudflareStreamKey: "CF_STRM_KEY_666",
+  stripeKey: "STRIPE_TEST_SK_9988",
   newsApiKey: "NEWS_API_SEC_112233",
   googleAnalyticsId: "G-ADSLIVE99",
   firebaseKey: "FB_WEB_CONFIG_2026_SEC",
   espnApiKey: "site.api.espn.com"
 };
+
+// SLEEPMOOD, REFERRAL & COUPON SEALER STATE
+let sleepMoodConfig = {
+  enabled: true,
+  autoTriggerViews: 2,
+  peakTrafficSchedule: false,
+  peakWindowLabel: "19:00 - 23:00 UTC (Peak Live Match Traffic)",
+  referralThreshold: 3,
+  bonusVipDays: 7,
+  bonusPointsPerReferral: 150
+};
+
+let userStreamViews: Record<string, number> = {
+  "guest-id": 0,
+  "user-1": 0
+};
+
+interface CouponRecord {
+  code: string;
+  discountPercent: number;
+  description: string;
+  sealed: boolean;
+  uses: number;
+  maxUses: number;
+  createdAt: string;
+}
+
+let adminCoupons: CouponRecord[] = [
+  { code: "ADSRULE", discountPercent: 20, description: "Official Launch 20% OFF", sealed: false, uses: 14, maxUses: 500, createdAt: new Date(Date.now() - 86400000).toISOString() },
+  { code: "VIP50", discountPercent: 50, description: "Half-Price VIP Flash Promo", sealed: false, uses: 8, maxUses: 100, createdAt: new Date(Date.now() - 43200000).toISOString() },
+  { code: "FREETRIAL7", discountPercent: 100, description: "7-Day Free Trial Sealer Code", sealed: false, uses: 3, maxUses: 50, createdAt: new Date(Date.now() - 21600000).toISOString() },
+  { code: "REFVIP30", discountPercent: 30, description: "Referral Tier Bonus 30% OFF", sealed: false, uses: 2, maxUses: 250, createdAt: new Date(Date.now() - 10800000).toISOString() }
+];
+
+let referralStore: Record<string, {
+  referralsCount: number;
+  points: number;
+  bonusVipDays: number;
+  unlockedFreeAccess: boolean;
+  rewardCoupons: { code: string; discountPercent: number; description: string }[];
+  referredUsers: { name: string; plan: string; date: string }[];
+}> = {
+  "guest-id": {
+    referralsCount: 1,
+    points: 150,
+    bonusVipDays: 0,
+    unlockedFreeAccess: false,
+    rewardCoupons: [],
+    referredUsers: [
+      { name: "Alex Rivera", plan: "Free", date: "Today" }
+    ]
+  },
+  "user-1": {
+    referralsCount: 3,
+    points: 650,
+    bonusVipDays: 14,
+    unlockedFreeAccess: true,
+    rewardCoupons: [
+      { code: "REFVIP30", discountPercent: 30, description: "Referral Tier Bonus 30% OFF" }
+    ],
+    referredUsers: [
+      { name: "Sophia Martin", plan: "Premium", date: "Yesterday" },
+      { name: "Marco Silva", plan: "Free", date: "2 days ago" },
+      { name: "Kofi Mensah", plan: "VIP", date: "3 days ago" }
+    ]
+  }
+};
+
+function getOrCreateReferralRecord(userId: string) {
+  if (!referralStore[userId]) {
+    referralStore[userId] = {
+      referralsCount: 0,
+      points: 0,
+      bonusVipDays: 0,
+      unlockedFreeAccess: false,
+      rewardCoupons: [],
+      referredUsers: []
+    };
+  }
+  return referralStore[userId];
+}
+
+function getRankBadge(points: number): string {
+  if (points >= 600) return "Gold Legend";
+  if (points >= 300) return "Silver Captain";
+  return "Bronze Scout";
+}
+
+function computeSleepMoodStatus(userId: string, subscriptionPlan: string) {
+  const rec = getOrCreateReferralRecord(userId);
+  const viewsUsed = userStreamViews[userId] || 0;
+  const isPaid = subscriptionPlan === "Premium" || subscriptionPlan === "VIP";
+  const referralUnlocked = rec.unlockedFreeAccess || rec.referralsCount >= sleepMoodConfig.referralThreshold;
+
+  let locked = false;
+  let reason = "";
+
+  if (!isPaid && !referralUnlocked && sleepMoodConfig.enabled) {
+    if (sleepMoodConfig.peakTrafficSchedule) {
+      locked = true;
+      reason = `Peak Live Traffic Window (${sleepMoodConfig.peakWindowLabel}) is active for Free accounts.`;
+    } else if (viewsUsed >= sleepMoodConfig.autoTriggerViews) {
+      locked = true;
+      reason = `Free tier limit of ${sleepMoodConfig.autoTriggerViews} stream view(s) reached.`;
+    }
+  }
+
+  return {
+    sleepMoodEnabled: sleepMoodConfig.enabled,
+    autoTriggerViews: sleepMoodConfig.autoTriggerViews,
+    peakTrafficSchedule: sleepMoodConfig.peakTrafficSchedule,
+    peakWindowLabel: sleepMoodConfig.peakWindowLabel,
+    referralThreshold: sleepMoodConfig.referralThreshold,
+    bonusVipDays: sleepMoodConfig.bonusVipDays,
+    viewsUsed,
+    viewsLimit: sleepMoodConfig.autoTriggerViews,
+    locked,
+    referralUnlocked,
+    reason
+  };
+}
+
+const streamTransponders = [
+  {
+    id: "bein-hd1",
+    name: "beIN Sports HD1",
+    quality: "1080p Ultra HD",
+    streamUrl: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+    fallbackMp4: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+    protocol: "HLS"
+  },
+  {
+    id: "sky-premier",
+    name: "Sky Sports Premier",
+    quality: "1080p HD",
+    streamUrl: "https://test-streams.mux.dev/pts_700k/playlist.m3u8",
+    fallbackMp4: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+    protocol: "HLS"
+  },
+  {
+    id: "espn-plus",
+    name: "ESPN+",
+    quality: "1080p Low-Latency",
+    streamUrl: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+    fallbackMp4: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
+    protocol: "MUX"
+  },
+  {
+    id: "canal-sport",
+    name: "Canal+ Sport",
+    quality: "720p HD",
+    streamUrl: "https://test-streams.mux.dev/pts_700k/playlist.m3u8",
+    fallbackMp4: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoy.mp4",
+    protocol: "HLS"
+  },
+  {
+    id: "movistar",
+    name: "Movistar LaLiga",
+    quality: "1080p HD",
+    streamUrl: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+    fallbackMp4: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4",
+    protocol: "HLS"
+  },
+  {
+    id: "fox-sports",
+    name: "FOX Sports 4K",
+    quality: "1080p Ultra HD",
+    streamUrl: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+    fallbackMp4: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4",
+    protocol: "HLS"
+  }
+];
 
 // AUDIT LOGGING DATA STRUCTURE FOR BACKEND ADMINISTRATION ACTIONS
 interface AuditLog {
@@ -269,7 +480,7 @@ Return EXACTLY a JSON payload with the following fields:
 Strict constraint: Return raw JSON text containing ONLY the JSON output, no markdown wrappers like \`\`\`json.`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-2.1-flash",
+        model: "gemini-4-hydrogen",
         contents: prompt
       });
 
@@ -352,6 +563,387 @@ Strict constraint: Return raw JSON text containing ONLY the JSON output, no mark
   res.json({ success: true, trailer });
 });
 
+// API 3.2: 3-SCENE CINEMATIC TRAILER GENERATOR (/api/ai/generate-trailer)
+app.post("/api/ai/generate-trailer", async (req, res) => {
+  const { matchId } = req.body;
+  const match = serverMatches.find((m: any) => m.id === matchId) || serverMatches[0];
+  if (!match) return res.status(404).json({ error: "Match not found" });
+
+  let trailer: any = null;
+  if (ai) {
+    try {
+      const prompt = `Create a 3-scene cinematic match preview trailer (Intro, Tension Build, Climax) for ${match.homeTeam} vs ${match.awayTeam} in ${match.league} at ${match.venue}.
+Return ONLY valid JSON with:
+- "title": string
+- "narrative": string
+- "music": string
+- "scenes": array of EXACTLY 3 objects with fields:
+  - "stage": "Intro" | "Tension Build" | "Climax"
+  - "title": string
+  - "description": string
+  - "audioCue": string
+  - "cameraMove": string
+  - "voiceoverScript": string
+  - "imageKeyword": "stadium" | "soccer" | "tactics"`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-4-hydrogen",
+        contents: prompt
+      });
+      const cleaned = (response.text || "").replace(/```json/gi, "").replace(/```/g, "").trim();
+      const parsed = JSON.parse(cleaned);
+      if (parsed.title && Array.isArray(parsed.scenes) && parsed.scenes.length >= 3) {
+        const imgs = [
+          "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=800&fit=crop",
+          "https://images.unsplash.com/photo-1540747737956-378724044432?w=800&fit=crop",
+          "https://images.unsplash.com/photo-1431324155629-1a6edd1d141d?w=800&fit=crop"
+        ];
+        trailer = {
+          id: "ai-tr-" + match.id,
+          title: parsed.title,
+          narrative: parsed.narrative || `Matchday spotlight on ${match.homeTeam} vs ${match.awayTeam}.`,
+          music: parsed.music || "Stadium Horizon Synth",
+          scenes: parsed.scenes.slice(0, 3).map((sc: any, idx: number) => ({
+            time: idx * 6,
+            stage: sc.stage || (idx === 0 ? "Intro" : idx === 1 ? "Tension Build" : "Climax"),
+            title: sc.title,
+            description: sc.description,
+            audioCue: sc.audioCue || "Deep sub-bass pulse + crowd roar swell",
+            cameraMove: sc.cameraMove || "Slow aerial drone sweep",
+            voiceoverScript: sc.voiceoverScript || sc.description,
+            image: imgs[idx % imgs.length]
+          }))
+        };
+      }
+    } catch (err) {
+      console.warn("AI 3-scene trailer generation fallback active:", err);
+    }
+  }
+
+  if (!trailer) {
+    trailer = {
+      id: "ai-tr-" + match.id,
+      title: `${match.homeTeam} vs ${match.awayTeam}: Champions Broadcast Preview`,
+      narrative: `Ninety minutes of elite tactical warfare awaits under the floodlights of ${match.venue}.`,
+      music: "Apex Arena Orchestral Synth",
+      scenes: [
+        {
+          time: 0,
+          stage: "Intro",
+          title: `Floodlights Over ${match.venue}`,
+          description: `Supporters fill every tier as ${match.homeTeam} and ${match.awayTeam} prepare for kickoff in ${match.league}.`,
+          audioCue: "Low orchestral cello drone with distant stadium chant",
+          cameraMove: "Sweeping crane descent over pitch center circle",
+          voiceoverScript: `Tonight at ${match.venue}, reputations are forged under the lights.`,
+          image: "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=800&fit=crop"
+        },
+        {
+          time: 6,
+          stage: "Tension Build",
+          title: "Tactical Chessboard & High-Press Duel",
+          description: `Midfield generals lock down half-spaces while wingers sprint behind high defensive lines.`,
+          audioCue: "Rising percussive heartbeat snare & synth arpeggio",
+          cameraMove: "Rapid dolly zoom onto player tunnel & tactical board",
+          voiceoverScript: `Every duel in transition could tilt the balance between glory and heartbreak.`,
+          image: "https://images.unsplash.com/photo-1540747737956-378724044432?w=800&fit=crop"
+        },
+        {
+          time: 12,
+          stage: "Climax",
+          title: "Moment of Glory",
+          description: `Stoppage time tension—one decisive strike decides the fate of ${match.league}.`,
+          audioCue: "Full brass crescendo + thunderous crowd eruption",
+          cameraMove: "Slow-motion 120fps tracking shot behind the goal net",
+          voiceoverScript: `${match.homeTeam} versus ${match.awayTeam}. Watch every second live on AdSLiveTv.`,
+          image: "https://images.unsplash.com/photo-1431324155629-1a6edd1d141d?w=800&fit=crop"
+        }
+      ]
+    };
+  }
+
+  res.json({ success: true, trailer });
+});
+
+// API 3.3: STREAM TRANSPONDERS & SSRF-SAFE .M3U8 MANIFEST VALIDATOR
+app.get("/api/streams/transponders", (req, res) => {
+  const exp = Math.floor(Date.now() / 1000) + 3600;
+  const transponders = streamTransponders.map(t => {
+    const sig = crypto
+      .createHmac("sha256", STREAM_SIGNING_SECRET)
+      .update(`${t.id}:${exp}`)
+      .digest("hex")
+      .slice(0, 16);
+    return {
+      ...t,
+      signedToken: `st_${t.id}_${exp}_${sig}`
+    };
+  });
+  res.json({ transponders });
+});
+
+app.get("/api/streams/validate", async (req, res) => {
+  const rawUrl = (req.query.url as string || "").trim();
+  if (!rawUrl) {
+    return res.status(400).json({ valid: false, message: "Missing stream url parameter." });
+  }
+
+  const parsed = isSafeExternalHttpUrl(rawUrl);
+  if (!parsed) {
+    return res.status(400).json({ valid: false, message: "Invalid or restricted stream URL." });
+  }
+
+  const startedAt = Date.now();
+  try {
+    const response = await fetch(parsed.toString(), {
+      method: "GET",
+      signal: AbortSignal.timeout(4000),
+      headers: { "Accept": "application/vnd.apple.mpegurl, application/x-mpegURL, */*" }
+    });
+    const latencyMs = Date.now() - startedAt;
+    const contentType = response.headers.get("content-type") || "";
+    const textSnippet = response.ok ? (await response.text()).slice(0, 200) : "";
+    const isManifest = textSnippet.includes("#EXTM3U") || parsed.pathname.endsWith(".m3u8") || parsed.pathname.endsWith(".mp4");
+
+    res.json({
+      valid: response.ok && isManifest,
+      status: response.status,
+      latencyMs,
+      contentType,
+      message: response.ok
+        ? `Manifest verified (${response.status} OK, ${latencyMs}ms)`
+        : `Stream endpoint responded with HTTP ${response.status}`
+    });
+  } catch (err: any) {
+    res.json({
+      valid: false,
+      status: 0,
+      latencyMs: Date.now() - startedAt,
+      message: err?.name === "TimeoutError" ? "Stream validation timed out after 4s" : "Unable to reach stream manifest"
+    });
+  }
+});
+
+// API 3.4: SLEEPMOOD STATUS, VIEW TRACKING & ADMIN CONTROLS
+app.get("/api/sleepmood/status", (req, res) => {
+  const status = computeSleepMoodStatus(serverUser.id, serverUser.subscriptionPlan);
+  res.json(status);
+});
+
+app.post("/api/sleepmood/track-view", (req, res) => {
+  const uid = serverUser.id || "guest-id";
+  if (serverUser.subscriptionPlan === "Free") {
+    userStreamViews[uid] = (userStreamViews[uid] || 0) + 1;
+  }
+  const status = computeSleepMoodStatus(uid, serverUser.subscriptionPlan);
+  res.json(status);
+});
+
+app.post("/api/admin/sleepmood/toggle", requireAdminAuth, (req, res) => {
+  const { enabled, autoTriggerViews, peakTrafficSchedule, referralThreshold, bonusVipDays, resetViews } = req.body;
+
+  if (typeof enabled === "boolean") sleepMoodConfig.enabled = enabled;
+  if (typeof autoTriggerViews === "number" && autoTriggerViews >= 1 && autoTriggerViews <= 10) {
+    sleepMoodConfig.autoTriggerViews = autoTriggerViews;
+  }
+  if (typeof peakTrafficSchedule === "boolean") sleepMoodConfig.peakTrafficSchedule = peakTrafficSchedule;
+  if (typeof referralThreshold === "number" && referralThreshold >= 1 && referralThreshold <= 10) {
+    sleepMoodConfig.referralThreshold = referralThreshold;
+  }
+  if (typeof bonusVipDays === "number" && bonusVipDays >= 1 && bonusVipDays <= 90) {
+    sleepMoodConfig.bonusVipDays = bonusVipDays;
+  }
+  if (resetViews) {
+    userStreamViews = { "guest-id": 0, "user-1": 0 };
+  }
+
+  logAdminAction(
+    "Administrator",
+    `Updated SleepMood controls: enabled=${sleepMoodConfig.enabled}, autoTriggerViews=${sleepMoodConfig.autoTriggerViews}, peakSchedule=${sleepMoodConfig.peakTrafficSchedule}, referralThreshold=${sleepMoodConfig.referralThreshold}`,
+    "SUCCESS"
+  );
+
+  res.json({ success: true, config: sleepMoodConfig });
+});
+
+// API 3.5: REFERRAL & AFFILIATE UNLOCK PROGRAM
+app.get("/api/referrals/my-stats", (req, res) => {
+  const uid = serverUser.id || "guest-id";
+  const rec = getOrCreateReferralRecord(uid);
+  const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+  res.json({
+    userId: uid,
+    referralLink: `${baseUrl}/ref/${uid}`,
+    referralsCount: rec.referralsCount,
+    requiredCount: sleepMoodConfig.referralThreshold,
+    points: rec.points,
+    rankBadge: getRankBadge(rec.points),
+    bonusVipDays: rec.bonusVipDays,
+    unlockedFreeAccess: rec.unlockedFreeAccess || rec.referralsCount >= sleepMoodConfig.referralThreshold,
+    rewardCoupons: rec.rewardCoupons,
+    referredUsers: rec.referredUsers
+  });
+});
+
+app.post("/api/referrals/claim", (req, res) => {
+  const { friendName, upgradedPlan, referrerId } = req.body || {};
+  const uid = referrerId || serverUser.id || "guest-id";
+  const rec = getOrCreateReferralRecord(uid);
+
+  if (friendName) {
+    const planLabel = upgradedPlan === "VIP" || upgradedPlan === "Premium" ? upgradedPlan : "Free";
+    rec.referralsCount += 1;
+    rec.points += planLabel === "Free" ? sleepMoodConfig.bonusPointsPerReferral : sleepMoodConfig.bonusPointsPerReferral * 2;
+    if (planLabel !== "Free") {
+      rec.bonusVipDays += sleepMoodConfig.bonusVipDays;
+      if (!rec.rewardCoupons.some(c => c.code === "REFVIP30")) {
+        rec.rewardCoupons.push({
+          code: "REFVIP30",
+          discountPercent: 30,
+          description: "Referral Tier Bonus 30% OFF"
+        });
+      }
+    }
+    rec.referredUsers.unshift({
+      name: String(friendName).slice(0, 40),
+      plan: planLabel,
+      date: "Just now"
+    });
+  }
+
+  if (rec.referralsCount >= sleepMoodConfig.referralThreshold) {
+    rec.unlockedFreeAccess = true;
+    userStreamViews[uid] = 0;
+  }
+
+  res.json({
+    success: true,
+    unlockedFreeAccess: rec.unlockedFreeAccess,
+    referralsCount: rec.referralsCount,
+    requiredCount: sleepMoodConfig.referralThreshold,
+    points: rec.points,
+    rankBadge: getRankBadge(rec.points),
+    bonusVipDays: rec.bonusVipDays,
+    rewardCoupons: rec.rewardCoupons,
+    referredUsers: rec.referredUsers,
+    sleepMood: computeSleepMoodStatus(serverUser.id, serverUser.subscriptionPlan)
+  });
+});
+
+app.get("/ref/:user_id", (req, res) => {
+  const refId = encodeURIComponent(req.params.user_id);
+  res.redirect(`/?ref=${refId}`);
+});
+
+// API 3.6: ADMINISTRATOR COUPON & DISCOUNT SEALER + CHECKOUT
+app.post("/api/coupons/validate", (req, res) => {
+  const rawCode = String(req.body?.code || "").trim().toUpperCase();
+  if (!rawCode) {
+    return res.status(400).json({ valid: false, message: "Enter a coupon code to validate." });
+  }
+  const coupon = adminCoupons.find(c => c.code === rawCode);
+  if (!coupon) {
+    return res.json({ valid: false, message: "Coupon code not found." });
+  }
+  if (coupon.sealed) {
+    return res.json({ valid: false, message: "This coupon has been sealed by the Administrator." });
+  }
+  if (coupon.uses >= coupon.maxUses) {
+    return res.json({ valid: false, message: "Coupon redemption limit reached." });
+  }
+  res.json({
+    valid: true,
+    code: coupon.code,
+    discountPercent: coupon.discountPercent,
+    description: coupon.description,
+    message: `VALID: ${coupon.discountPercent}% OFF (${coupon.description})`
+  });
+});
+
+app.get("/api/admin/coupons", requireAdminAuth, (req, res) => {
+  res.json({ coupons: adminCoupons });
+});
+
+app.post("/api/admin/coupons/create", requireAdminAuth, (req, res) => {
+  const code = String(req.body?.code || "").trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+  const discountPercent = Number(req.body?.discountPercent);
+  const description = String(req.body?.description || "Promotional Sealer Code").trim().slice(0, 80);
+  const maxUses = Math.max(1, Number(req.body?.maxUses) || 100);
+
+  if (!code || code.length < 3 || Number.isNaN(discountPercent) || discountPercent < 1 || discountPercent > 100) {
+    return res.status(400).json({ error: "Provide a valid code (min 3 chars) and discount (1-100%)." });
+  }
+
+  if (adminCoupons.some(c => c.code === code)) {
+    return res.status(409).json({ error: `Coupon code '${code}' already exists.` });
+  }
+
+  const newCoupon: CouponRecord = {
+    code,
+    discountPercent,
+    description,
+    sealed: false,
+    uses: 0,
+    maxUses,
+    createdAt: new Date().toISOString()
+  };
+  adminCoupons.unshift(newCoupon);
+  logAdminAction("Administrator", `Created promotional coupon ${code} (${discountPercent}% OFF)`, "SUCCESS");
+  res.json({ success: true, coupon: newCoupon, coupons: adminCoupons });
+});
+
+app.post("/api/admin/coupons/:code/toggle-seal", requireAdminAuth, (req, res) => {
+  const target = adminCoupons.find(c => c.code === req.params.code.toUpperCase());
+  if (!target) return res.status(404).json({ error: "Coupon not found" });
+  target.sealed = !target.sealed;
+  logAdminAction("Administrator", `${target.sealed ? "Sealed" : "Unsealed"} coupon ${target.code}`, "SUCCESS");
+  res.json({ success: true, coupon: target, coupons: adminCoupons });
+});
+
+app.post("/api/payments/create-checkout", (req, res) => {
+  const { plan, paymentMethod, couponCode } = req.body || {};
+  if (plan !== "Premium" && plan !== "VIP") {
+    return res.status(400).json({ error: "Invalid subscription plan selected." });
+  }
+
+  const originalPrice = plan === "VIP" ? 49.99 : 19.99;
+  let discountPercent = 0;
+  let appliedCoupon: string | null = null;
+
+  if (couponCode) {
+    const normalized = String(couponCode).trim().toUpperCase();
+    const found = adminCoupons.find(c => c.code === normalized && !c.sealed && c.uses < c.maxUses);
+    if (found) {
+      discountPercent = found.discountPercent;
+      appliedCoupon = found.code;
+      found.uses += 1;
+    }
+  }
+
+  const finalPrice = Number((originalPrice * (1 - discountPercent / 100)).toFixed(2));
+  serverUser.subscriptionPlan = plan;
+  if (serverUser.role === "Guest" || serverUser.role === "Registered User") {
+    serverUser.role = "Premium User";
+  }
+  serverUser.cardLast4 = paymentMethod === "paypal" ? "PPAL" : paymentMethod === "crypto" ? "USDT" : "4242";
+  serverUser.renewalDate = "2027-06-15";
+  userStreamViews[serverUser.id] = 0;
+
+  logAdminAction("Checkout Engine", `Processed ${paymentMethod || "stripe"} checkout for ${plan} ($${finalPrice}${appliedCoupon ? `, coupon ${appliedCoupon}` : ""})`, "SUCCESS");
+
+  res.json({
+    success: true,
+    sessionId: "chk_" + crypto.randomBytes(6).toString("hex"),
+    provider: paymentMethod || "stripe",
+    plan,
+    originalPrice,
+    discountPercent,
+    appliedCoupon,
+    finalPrice,
+    user: serverUser,
+    sleepMood: computeSleepMoodStatus(serverUser.id, serverUser.subscriptionPlan)
+  });
+});
+
 // Dynamic goal submission mock for Admins/Moderators
 app.post("/api/matches/:id/goal", (req, res) => {
   const match = serverMatches.find(m => m.id === req.params.id);
@@ -411,7 +1003,7 @@ app.post("/api/news/:id/summarize", async (req, res) => {
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-4-hydrogen",
       contents: `Summarize the following sports news content into two brief, punchy sentences focusing on football strategy and results: \n\n${article.content}`,
     });
 
@@ -470,7 +1062,7 @@ app.post("/api/admin/login", (req, res) => {
     logAdminAction("System Auth", `Successful admin credentials login for ${email}`, "SUCCESS");
     res.json({
       success: true,
-      token: "session_token_adslivetv_2026_xyz",
+      token: ADMIN_SESSION_TOKEN,
       user: {
         email,
         role: "Administrator",
@@ -674,16 +1266,17 @@ app.get("/api/admin/config", (req, res) => {
       masked[k] = masked[k].substring(0, 4) + "****" + masked[k].substring(masked[k].length - 2);
     }
   });
-  res.json({ masked, actual: serverApiConfig });
+  res.json({ masked, actual: serverApiConfig, geminiConfigured: Boolean(ai) });
 });
 
 app.post("/api/admin/config", (req, res) => {
-  const { apiFootballKey, sportMonksKey, muxKey, cloudflareStreamKey, newsApiKey, googleAnalyticsId, firebaseKey, espnApiKey } = req.body;
+  const { apiFootballKey, sportMonksKey, muxKey, cloudflareStreamKey, stripeKey, newsApiKey, googleAnalyticsId, firebaseKey, espnApiKey } = req.body;
   
   if (apiFootballKey) serverApiConfig.apiFootballKey = apiFootballKey;
   if (sportMonksKey) serverApiConfig.sportMonksKey = sportMonksKey;
   if (muxKey) serverApiConfig.muxKey = muxKey;
   if (cloudflareStreamKey) serverApiConfig.cloudflareStreamKey = cloudflareStreamKey;
+  if (stripeKey) serverApiConfig.stripeKey = stripeKey;
   if (newsApiKey) serverApiConfig.newsApiKey = newsApiKey;
   if (googleAnalyticsId) serverApiConfig.googleAnalyticsId = googleAnalyticsId;
   if (firebaseKey) serverApiConfig.firebaseKey = firebaseKey;
@@ -734,7 +1327,7 @@ Events already occurred: ${JSON.stringify(match.events)}
 Stats so far: ${JSON.stringify(match.stats)}`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-4-hydrogen",
       contents: prompt,
     });
 
@@ -779,7 +1372,7 @@ app.post("/api/gemini/chat", async (req, res) => {
     
     // Construct request contents
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-4-hydrogen",
       contents: latestText,
       config: {
         systemInstruction: systemPrompt
@@ -798,9 +1391,9 @@ app.get("/api/affiliates", (req, res) => {
 });
 
 // API 8.5: GEMINI REAL-TIME LIVE SOCCER TV BROADCAST SCHEDULES (SEARCH GROUNDING)
-app.post("/api/gemini/soccer-schedules", async (req, res) => {
+async function handleGroundedSchedules(req: express.Request, res: express.Response) {
   const { query } = req.body;
-  const searchQuery = query ? query.trim() : "";
+  const searchQuery = query ? String(query).trim() : "";
   const basePrompt = `Generate a modern, highly detailed overview of live soccer matches, official TV networks, and legal streaming broadcast schedules available today from livesoccertv.com.
 State what streaming sites/networks are broadcasting these matches such as:
 - FuboTV (has FOX, FS1, beIN Sports, and free trials)
@@ -823,7 +1416,6 @@ Organize the output into clear sections:
 Make sure the tone is informative and dynamic. Provide direct match listings with exact official broadcasters.`;
 
   if (!ai) {
-    // Highly polished static response incorporating all user's described channels & sites as fallbacks
     const fallbackText = `### 📡 REAL-TIME LIVE TV & STREAMING CHANNELS
 * **FuboTV**: Excellent choice for live soccer streaming in North America. Provides complete access to FOX, FS1, FS2, beIN Sports, Univision, and TUDN. Perfect for Premier League, MLS, and international football fixtures. Often offers a 7-day free trial.
 * **ESPN+**: Official home of Spanish La Liga and German Bundesliga in the US.
@@ -865,7 +1457,7 @@ Make sure the tone is informative and dynamic. Provide direct match listings wit
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-4-hydrogen",
       contents: basePrompt,
       config: {
         tools: [{ googleSearch: {} }],
@@ -888,7 +1480,10 @@ Make sure the tone is informative and dynamic. Provide direct match listings wit
     console.error("Grounding Schedule Error:", err);
     res.status(500).json({ error: "Failed to download live television schedule: " + err.message });
   }
-});
+}
+
+app.post("/api/gemini/soccer-schedules", handleGroundedSchedules);
+app.post("/api/ai/schedules-grounded", handleGroundedSchedules);
 
 // RapidAPI & ESPN API Integration Layer
 app.get("/api/external/matches", async (req, res) => {

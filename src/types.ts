@@ -139,9 +139,48 @@ export interface ApiConfiguration {
   sportMonksKey: string;
   muxKey: string;
   cloudflareStreamKey: string;
+  stripeKey?: string;
   newsApiKey: string;
   googleAnalyticsId: string;
   firebaseKey: string;
+  espnApiKey?: string;
+}
+
+export interface SleepMoodStatus {
+  sleepMoodEnabled: boolean;
+  autoTriggerViews: number;
+  peakTrafficSchedule: boolean;
+  peakWindowLabel: string;
+  referralThreshold: number;
+  bonusVipDays: number;
+  viewsUsed: number;
+  viewsLimit: number;
+  locked: boolean;
+  referralUnlocked: boolean;
+  reason?: string;
+}
+
+export interface ReferralStats {
+  userId: string;
+  referralLink: string;
+  referralsCount: number;
+  requiredCount: number;
+  points: number;
+  rankBadge: string;
+  bonusVipDays: number;
+  unlockedFreeAccess: boolean;
+  rewardCoupons: { code: string; discountPercent: number; description: string }[];
+  referredUsers: { name: string; plan: string; date: string }[];
+}
+
+export interface StreamTransponder {
+  id: string;
+  name: string;
+  quality: string;
+  streamUrl: string;
+  fallbackMp4: string;
+  protocol: "HLS" | "MUX";
+  signedToken?: string;
 }
 
 export interface BettingAffiliate {
